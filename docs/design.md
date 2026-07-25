@@ -60,6 +60,16 @@ No text badges on cards. A show's Watch State is read off the poster itself:
 - **Parse choreography**: dots-pill + shimmer skeleton cards where shows will land; landed cards pop with a brief accent glow (1.4s). Respect `prefers-reduced-motion`.
 - **Posters**: real TMDB art in production; seeded-placeholder + gradient/initials fallback while loading or offline.
 
+## Entry, auth, empty, and error surfaces
+
+Decided 2026-07-26 (post-design-pass):
+
+- **Signed-out landing = one-screen hero** in the product's own style: wordmark, one line ("Log what you watch. Outwatch your friends."), Sign in / Sign up buttons, and a mock poster grid beneath. No multi-section marketing page in MVP.
+- **Sign-in/sign-up = Clerk prebuilt components** (`<SignIn/>`, `<SignUp/>`) themed via Clerk's appearance API to these tokens: `#141414` background, `#1F1F1F` surface, `#E50914` accent, Figtree. No custom auth forms.
+- **First-run Home (zero shows) = empty-state card** where the grid would be: "Nothing here yet. Type what you watch — we do the rest.", a large "＋ Log watching" button, and the same three clickable examples as the palette helper. The FAB remains.
+- **Errors appear inline, where the user acted.** A failed parse shows a strip inside the palette ("Couldn't match that. Check the spelling, or try \"show name 3 seasons\"."); a failed toggle reverts the checkbox with an inline notice; a failed friend request explains next to the Send button. Toasts are reserved for background events (e.g. Show Refresh results). Errors state what happened and what to do — never apologize, never just "something went wrong".
+- Other empty states follow the settings example: one sentence, then the action ("Nothing pending. Share your code to get started."). Leaderboard with no friends: "It's just you so far. Add a friend to start the race." + Add-friend affordance.
+
 ## Copy rules
 
 - **Active voice; the control names the outcome**: "Mark all watched", "Send request", "Copy" — never "Submit" / "OK".
