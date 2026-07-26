@@ -5,25 +5,40 @@ Chosen 2026-07-26 from a four-direction design pass styled onto the decided layo
 Winner: **"Poster Wall"** — near-black, poster-forward, Netflix-inflected.
 Reference prototype: `prototype/tv-track-design-directions.html` (`?dir=4`, throwaway).
 
+**Refined 2026-07-26 (v2, same day, before any ticket existed):** same bones —
+same layout, same components, same signature element — with the token layer
+reworked from flat hex to a warmer, layered surface: gradients instead of flat
+fills, soft multi-layer shadows, and a warm off-white ink instead of pure
+white. This was a direct response to the flat version reading "clean but
+boring." Reference: claude.ai design artifact export, `Design System.dc.html`
+(not committed — throwaway, like the prototype file above).
+
 Every UI ticket builds inside this file. Don't introduce new colors, fonts, or
 spacing values without updating this doc first.
 
 ## Color tokens
 
-| Token | Hex | Use |
+| Token | Value | Use |
 |---|---|---|
-| `--bg` | `#141414` | App background (also the sidebar — no panel color) |
-| `--surface` | `#1F1F1F` | Cards, modals, palette box, list rows |
-| `--surface-2` | `#2B2B2B` | Nested surfaces: sticky season headers, input wells, bar tracks |
-| `--line` | `#2E2E2E` | Borders and hairlines (softer variant `#262626` for inner row dividers) |
-| `--ink` | `#FFFFFF` | Primary text |
-| `--muted` | `#A3A3A3` | Secondary text, placeholders, inactive nav |
-| `--accent` | `#E50914` | The one brand color: primary buttons, FAB, progress fill, the YOU row. Text on accent is white. |
-| `--full` | `#46D369` | Full Watch State: the ✓ chip, done stepper dots |
-| `--partial` | `#E8B339` | Partial Watch State accents (stepper "current" dot); the poster progress bar itself stays red |
+| `--bg` | `linear-gradient(175deg, #181310 0%, #100d0b 55%, #0a0908 100%)` | App background (also the sidebar — no panel color). A gradient, not a flat fill — warm brown undertone, not grey. |
+| `--surface` | `linear-gradient(160deg, #241f1b, #1a1613)` | Cards, modals, palette box, list rows |
+| `--surface-2` | `#2B2521` | Nested surfaces: sticky season headers, input wells, bar tracks |
+| `--line` | `rgba(255,255,255,.07)` | Borders and hairlines (softer variant `rgba(255,255,255,.045)` for inner row dividers) |
+| `--ink` | `#F3EEE8` | Primary text — warm off-white, not pure white |
+| `--muted` | `rgba(243,238,232,.5)` (use `.4`–`.62` depending on emphasis) | Secondary text, placeholders, inactive nav |
+| `--accent` | `linear-gradient(135deg, #e8434f, #c81c28)` | The one brand color: primary buttons, FAB, progress fill, the YOU row. Text on accent is white. Solid `#c81c28` where a gradient can't apply (e.g. a 1px underline). |
+| `--full` | `#3EBE6B` | Full Watch State: the ✓ chip, done stepper dots |
+| `--partial` | `#E0A83E` | Partial Watch State accents (stepper "current" dot); the poster progress bar itself stays red |
 
 Scrim behind modals: `rgba(0,0,0,.72)`. Leaderboard podium numerals only:
 gold `#F5C445`, silver `#C9CFD9`, bronze `#D08A4E`.
+
+**Depth via light, not glow.** Every surface gets a soft, multi-layer shadow
+(e.g. `0 1px 2px rgba(0,0,0,.5), 0 10px 24px rgba(0,0,0,.4)`) plus a 1px inner
+highlight (`inset 0 1px 0 rgba(255,255,255,.05)`) rather than a flat card with
+a hard border. This is what separates v2 from the original flat treatment —
+apply it to posters, cards, modals, and the sidebar/main split, not just
+modals.
 
 ## Typography
 
@@ -35,9 +50,9 @@ gold `#F5C445`, silver `#C9CFD9`, bronze `#D08A4E`.
 
 ## Spacing & shape
 
-- Spacing scale: **4 / 8 / 12 / 16 / 24 / 32** px. Grid gap is tight (10px) — density is the point.
-- Radii: **4px** posters and small controls, **6px** cards/rows, **8px** modals. Pills (chips, FAB) are full-round.
-- Poster grid: `repeat(auto-fill, minmax(170px, 1fr))` desktop; fixed 3-across under 720px.
+- Spacing scale: **4 / 8 / 12 / 16 / 24 / 32** px. Grid gap opened from 10px to **16px** in v2 — density is still the point, but the extra room reads premium rather than cramped.
+- Radii: **8px** posters and small controls, **12px** cards/rows, **16px** modals. (v2 sizes — up from 4/6/8, matched to the deeper shadow treatment.) Pills (chips, FAB) are full-round.
+- Poster grid: `repeat(auto-fill, minmax(168px, 1fr))` desktop; fixed 3-across under 720px.
 
 ## Signature element: the poster carries the state
 
@@ -65,7 +80,7 @@ No text badges on cards. A show's Watch State is read off the poster itself:
 Decided 2026-07-26 (post-design-pass):
 
 - **Signed-out landing = one-screen hero** in the product's own style: wordmark, one line ("Log what you watch. Outwatch your friends."), Sign in / Sign up buttons, and a mock poster grid beneath. No multi-section marketing page in MVP.
-- **Sign-in/sign-up = Clerk prebuilt components** (`<SignIn/>`, `<SignUp/>`) themed via Clerk's appearance API to these tokens: `#141414` background, `#1F1F1F` surface, `#E50914` accent, Figtree. No custom auth forms.
+- **Sign-in/sign-up = Clerk prebuilt components** (`<SignIn/>`, `<SignUp/>`) themed via Clerk's appearance API to the tokens above (`--bg`, `--surface`, `--accent`, Figtree) — Clerk's appearance API takes flat colors, so use the solid fallbacks (`#0a0908`, `#1a1613`, `#c81c28`) rather than the gradients. No custom auth forms.
 - **First-run Home (zero shows) = empty-state card** where the grid would be: "Nothing here yet. Type what you watch — we do the rest.", a large "＋ Log watching" button, and the same three clickable examples as the palette helper. The FAB remains.
 - **Errors appear inline, where the user acted.** A failed parse shows a strip inside the palette ("Couldn't match that. Check the spelling, or try \"show name 3 seasons\"."); a failed toggle reverts the checkbox with an inline notice; a failed friend request explains next to the Send button. Toasts exist only as brief confirmations of a user action ("Friend Code copied"). Errors state what happened and what to do — never apologize, never just "something went wrong".
 - **Show Refresh announces nothing.** New overnight episodes simply flip the poster out of Full (✓ chip gone, progress bar dips) — the signature element is the signal. No toast, no badge, no notification (notifications are parked per `docs/mvp-scope.md`).
