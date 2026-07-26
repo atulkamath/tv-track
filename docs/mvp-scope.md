@@ -20,10 +20,10 @@ _Was 15. `GET /shows/search` added 2026-07-26 during `/to-spec` — a deliberate
 
 ### NLP entry
 - `POST /shows/parse` — raw text in; returns `resolved` (cards created, marked watched) + `ambiguous` (candidates for the stepper, nothing saved yet). Re-entering an existing show updates the existing card — never duplicates.
-- `POST /shows/resolve-ambiguous` — one stepper choice in (`tmdb_id` + seasons); creates the card. Skipping = simply not calling this.
 
-### Typeahead
+### Typeahead & adding a show
 - `GET /shows/search?q=` — thin TMDB passthrough for the Spotlight palette's live suggestions: title, year, poster, `tmdb_id`, total episode count. No per-user state, writes nothing, short cache. Exists because picking from the suggestion list **is** the disambiguation — candidates have to be shown before anything is saved, so the Disambiguation Step never fires on this path.
+- `POST /shows` — `{ tmdb_id, seasons? }` in; creates the card, marking the stated seasons (or all, if omitted) watched. One route serves two callers: the typeahead's Add button, and the Disambiguation Step's per-candidate pick (this route was named `/shows/resolve-ambiguous` in earlier drafts — renamed once it became clear both features need identical behavior). Skipping a Disambiguation Step candidate is simply not calling this.
 
 ### Shows
 - `GET /shows` — home list: title, poster, derived badge per show.
