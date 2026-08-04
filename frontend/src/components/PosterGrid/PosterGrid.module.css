@@ -1,0 +1,32 @@
+.grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--space-4);
+}
+
+.tile {
+  aspect-ratio: 2 / 3;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.18s ease;
+}
+
+.tile:hover {
+  transform: scale(1.045);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile {
+    transition: none;
+  }
+}
+
+/* "under 720px" per docs/design.md — 719px keeps the desktop grid through exactly 720px.
+   Gap stays --space-4: design.md states one grid-gap value (16px), not a separate mobile one. */
+@media (max-width: 719px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
