@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A person with an account in the app. Created lazily on their first
+/// authenticated request — there is no Clerk webhook (see docs/mvp-scope.md).
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// Clerk's subject id (`sub` claim). The identity we key everything off.
+  clerkUserId String   @unique @map("clerk_user_id")
+  /// 6-char lookup code, regenerable. See CONTEXT.md → Friend Code.
+  friendCode  String   @unique @map("friend_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
