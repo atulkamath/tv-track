@@ -132,6 +132,14 @@ a {
   --color-ring: var(--ring);
 
   --color-scrim: var(--scrim);
+
+  /* Leaderboard podium numerals only (docs/design.md) — solid colors, same
+     treatment as --scrim above: promoted so `text-gold`/`text-silver`/
+     `text-bronze` exist as utilities, not turned into shadcn semantic slots
+     since nothing else in the palette uses them. */
+  --color-gold: var(--gold);
+  --color-silver: var(--silver);
+  --color-bronze: var(--bronze);
 }
 
 /* Depth — soft, multi-layer shadow + a 1px inner highlight, not a hard
