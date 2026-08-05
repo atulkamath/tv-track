@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { renderApp, screen } from "../../../test/render";
+import { renderApp, screen, waitFor } from "../../../test/render";
 import { Modal } from "./Modal";
 
 function Harness({ initialOpen = false }: { initialOpen?: boolean }) {
@@ -56,8 +56,9 @@ describe("Modal", () => {
     await user.click(screen.getByText("content"));
     expect(onClose).not.toHaveBeenCalled();
 
-    // The scrim is the dialog's own backdrop — click its outer container, not its content.
-    await user.click(screen.getByRole("dialog").parentElement!);
+    // Base UI's backdrop is a sibling of the dialog, not an ancestor — click
+    // document.body, which is unambiguously outside the dialog either way.
+    await user.click(document.body);
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -66,11 +67,13 @@ describe("Modal", () => {
     renderApp(<Harness />);
     await user.click(screen.getByText("Open modal"));
 
+    // Base UI schedules initial focus via requestAnimationFrame, so it lands
+    // a tick after the click that opens the dialog.
     const first = screen.getByText("First");
-    expect(first).toHaveFocus();
+    await waitFor(() => expect(first).toHaveFocus());
 
     await user.keyboard("{Escape}");
-    expect(screen.getByText("Open modal")).toHaveFocus();
+    await waitFor(() => expect(screen.getByText("Open modal")).toHaveFocus());
   });
 
   it("traps focus: Tab wraps last -> first, Shift+Tab wraps first -> last", async () => {
@@ -79,12 +82,15 @@ describe("Modal", () => {
 
     const first = screen.getByText("First");
     const last = screen.getByText("Last");
-    expect(first).toHaveFocus();
+    await waitFor(() => expect(first).toHaveFocus());
 
+    // Base UI's trap uses real focus-guard sentinel elements at each end of
+    // the popup; the guard briefly holds focus before JS redirects it to the
+    // wrap target, so these also need waitFor.
     await user.tab({ shift: true });
-    expect(last).toHaveFocus();
+    await waitFor(() => expect(last).toHaveFocus());
 
     await user.tab();
-    expect(first).toHaveFocus();
+    await waitFor(() => expect(first).toHaveFocus());
   });
 });

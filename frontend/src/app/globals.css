@@ -1,5 +1,11 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
 /* Design tokens — sourced verbatim from docs/design.md. Don't introduce new
-   colors, fonts, or spacing values without updating that doc first. */
+   colors, fonts, or spacing values without updating that doc first.
+   Spacing (4/8/12/16/24/32) needs no custom tokens: Tailwind's default
+   p-1/2/3/4/6/8 etc. are already exact multiples of 4px. */
 :root {
   /* Color */
   --bg: linear-gradient(175deg, #181310 0%, #100d0b 55%, #0a0908 100%);
@@ -8,10 +14,10 @@
   --line: rgba(255, 255, 255, 0.07);
   --line-soft: rgba(255, 255, 255, 0.045);
   --ink: #f3eee8;
-  --muted: rgba(243, 238, 232, 0.5);
+  --ink-muted: rgba(243, 238, 232, 0.5);
   --muted-lo: rgba(243, 238, 232, 0.4);
   --muted-hi: rgba(243, 238, 232, 0.62);
-  --accent: linear-gradient(135deg, #e8434f, #c81c28);
+  --brand: linear-gradient(135deg, #e8434f, #c81c28);
   --accent-solid: #c81c28;
   --full: #3ebe6b;
   --partial: #e0a83e;
@@ -20,25 +26,26 @@
   --silver: #c9cfd9;
   --bronze: #d08a4e;
 
-  /* Depth — soft, multi-layer shadow + a 1px inner highlight, not a hard border */
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4);
-  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-
-  /* Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-
-  /* Radii: 8px posters/small controls, 12px cards/rows, 16px modals */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  /* shadcn semantic slots actually in use, reskinned to the palette above —
+     solid colors only, since these back component backgrounds and can't
+     take a gradient. Solid fallbacks match the ones already agreed for
+     Clerk's appearance API. Only the pairs touched by current components
+     are defined; shadcn's other slots (card, popover, muted, accent,
+     destructive, border, input, ring) are unused scaffolding until a ticket
+     actually needs one — add it then, per this file's own "don't introduce
+     ... without updating this doc first" rule. */
+  --background: #0a0908;
+  --foreground: var(--ink);
+  --primary: var(--accent-solid);
+  --primary-foreground: #fff;
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --radius: 12px;
 }
 
-/* Single theme by design — light theme was a rejected direction (docs/design.md). */
+/* Single theme by design — light theme was a rejected direction (docs/design.md).
+   No .dark override block: this app never toggles a .dark class, so the
+   palette above is the only theme, applied unconditionally via :root. */
 html {
   color-scheme: dark;
   height: 100%;
@@ -88,4 +95,41 @@ a {
   outline: 2px solid var(--accent-solid);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+@theme inline {
+  --font-sans: var(--font-figtree);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-scrim: var(--scrim);
+}
+
+/* Depth — soft, multi-layer shadow + a 1px inner highlight, not a hard
+   border (docs/design.md). --shadow-modal duplicates the two literal values
+   instead of combining them via var() so both layers land in one
+   box-shadow declaration; two separate shadow-* utility classes would just
+   have the later one win, since box-shadow isn't additive across classes. */
+@theme {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4);
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-modal:
+    0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* --bg and --surface are gradients, not colors — Tailwind's bg-* utilities
+   assume background-color, so they need their own utility rather than a
+   --color-* theme entry. */
+@utility bg-surface {
+  background: var(--surface);
 }

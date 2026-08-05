@@ -16,6 +16,14 @@ boring." Reference: claude.ai design artifact export, `Design System.dc.html`
 Every UI ticket builds inside this file. Don't introduce new colors, fonts, or
 spacing values without updating this doc first.
 
+**Implementation note (frontend, post-Tailwind/shadcn migration):** in
+`frontend/src/app/globals.css`, the brand gradient below is the CSS custom
+property `--brand` and the secondary-text token is `--ink-muted` — not
+`--accent`/`--muted` as named here. Those two names are reserved for
+shadcn's own semantic slots (hover-surface and muted-surface respectively,
+currently unused). Same values, different variable names — write
+`var(--brand)` / `var(--ink-muted)` in new frontend CSS, not the names below.
+
 ## Color tokens
 
 | Token | Value | Use |
