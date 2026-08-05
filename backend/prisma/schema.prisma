@@ -20,3 +20,59 @@ model User {
 
   @@map("users")
 }
+
+/// The shared TMDB catalog mirror (ADR 0002) — owned by no User. Populated the
+/// first time a show is added (a later ticket); this ticket only needs the
+/// shape to exist. `GET /shows/search` reads TMDB directly and never touches
+/// this table.
+model Show {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// TMDB's own id for this show — the join key used by Show Refresh.
+  tmdbId       Int      @unique @map("tmdb_id")
+  title        String
+  /// Year of first air date, or null if TMDB doesn't have one.
+  firstAirYear Int?     @map("first_air_year")
+  posterPath   String?  @map("poster_path")
+  /// TMDB's status string (e.g. "Ended", "Returning Series"); Show Refresh
+  /// skips shows TMDB marks Ended (see docs/mvp-scope.md).
+  status       String?
+  seasons      Season[]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("shows")
+}
+
+/// One season of a mirrored Show. See `Show` for why this table is shared.
+model Season {
+  id           String    @id @default(uuid()) @db.Uuid
+  show         Show      @relation(fields: [showId], references: [id], onDelete: Cascade)
+  showId       String    @map("show_id") @db.Uuid
+  /// TMDB's own id for this season.
+  tmdbId       Int       @unique @map("tmdb_id")
+  seasonNumber Int       @map("season_number")
+  episodes     Episode[]
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@unique([showId, seasonNumber])
+  @@map("seasons")
+}
+
+/// One episode of a mirrored Season. Runtime is what Watch Time sums over
+/// (see CONTEXT.md → Watch Time).
+model Episode {
+  id             String   @id @default(uuid()) @db.Uuid
+  season         Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonId       String   @map("season_id") @db.Uuid
+  /// TMDB's own id for this episode.
+  tmdbId         Int      @unique @map("tmdb_id")
+  episodeNumber  Int      @map("episode_number")
+  /// Minutes, per TMDB. Null when TMDB hasn't published a runtime yet.
+  runtimeMinutes Int?     @map("runtime_minutes")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([seasonId, episodeNumber])
+  @@map("episodes")
+}

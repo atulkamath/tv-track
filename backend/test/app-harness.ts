@@ -91,6 +91,8 @@ export async function createTestApp(): Promise<TestApp> {
     signInAs: (clerkUserId: string) => tokenVerifier.signInAs(clerkUserId),
     stubs: { tmdb, llm, friendCodes },
     async resetDatabase() {
+      // Seasons/episodes cascade off their Show.
+      await prisma.show.deleteMany();
       await prisma.user.deleteMany();
       friendCodes.reset();
       tmdb.searchShows.mockClear();
