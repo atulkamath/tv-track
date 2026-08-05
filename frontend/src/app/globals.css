@@ -2,6 +2,13 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* This app never toggles a .dark class (single theme by design, see below) —
+   scoping dark: to it, rather than leaving Tailwind's default
+   prefers-color-scheme media query, keeps components/ui/button.tsx's dark:
+   classes permanently inert instead of shifting with the visitor's OS
+   setting. */
+@custom-variant dark (&:is(.dark *));
+
 /* Design tokens — sourced verbatim from docs/design.md. Don't introduce new
    colors, fonts, or spacing values without updating that doc first.
    Spacing (4/8/12/16/24/32) needs no custom tokens: Tailwind's default
@@ -26,20 +33,31 @@
   --silver: #c9cfd9;
   --bronze: #d08a4e;
 
-  /* shadcn semantic slots actually in use, reskinned to the palette above —
-     solid colors only, since these back component backgrounds and can't
-     take a gradient. Solid fallbacks match the ones already agreed for
-     Clerk's appearance API. Only the pairs touched by current components
-     are defined; shadcn's other slots (card, popover, muted, accent,
-     destructive, border, input, ring) are unused scaffolding until a ticket
-     actually needs one — add it then, per this file's own "don't introduce
-     ... without updating this doc first" rule. */
+  /* shadcn semantic slots, reskinned to the palette above — solid colors
+     only, since these back component backgrounds/borders and can't take a
+     gradient. Solid fallbacks match the ones already agreed for Clerk's
+     appearance API. Defined in full: components/ui/button.tsx and
+     components/ui/dialog.tsx (DialogFooter, DialogDescription) reference
+     nearly all of these slots directly, so a partial set leaves some
+     variant silently unstyled rather than actually unused. */
   --background: #0a0908;
   --foreground: var(--ink);
+  --card: #1a1613;
+  --card-foreground: var(--ink);
+  --popover: #1a1613;
+  --popover-foreground: var(--ink);
   --primary: var(--accent-solid);
   --primary-foreground: #fff;
   --secondary: var(--surface-2);
   --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--ink);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent-solid);
   --radius: 12px;
 }
 
@@ -102,10 +120,22 @@ a {
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
   --color-scrim: var(--scrim);
 }

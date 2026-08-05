@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Dialog } from "@base-ui/react/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface ModalProps {
   open: boolean;
@@ -12,24 +12,16 @@ interface ModalProps {
 
 /**
  * The one modal primitive every centered overlay in this app builds on (show
- * detail, Disambiguation Step, per docs/design.md). Focus trap, Esc,
- * outside-click, and focus restore all come from Base UI's Dialog — see
+ * detail, Disambiguation Step, per docs/design.md). Composes the shadcn
+ * Dialog rather than Base UI's primitives directly — focus trap, Esc,
+ * outside-click, and focus restore all come from it for free (see
  * node_modules/@base-ui/react/dialog/root/DialogRoot.d.ts for the exact
- * defaults (modal=true, initialFocus/finalFocus default to "move focus").
+ * defaults). No header/footer here: each specific modal draws its own.
  */
 export function Modal({ open, onClose, ariaLabel, children }: ModalProps) {
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6">
-          <Dialog.Popup
-            aria-label={ariaLabel}
-            className="max-h-[84vh] w-full max-w-[640px] overflow-auto rounded-lg bg-surface shadow-modal outline-none"
-          >
-            {children}
-          </Dialog.Popup>
-        </Dialog.Backdrop>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent aria-label={ariaLabel}>{children}</DialogContent>
+    </Dialog>
   );
 }
