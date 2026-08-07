@@ -25,7 +25,10 @@ function letAnotherRequestWinTheRace(
   jest.spyOn(delegate, 'findUnique').mockImplementation(async (args: unknown) => {
     calls += 1;
     if (calls === 1) {
-      await prisma.user.create({ data: { clerkUserId, friendCode } });
+      // A distinct email from the stub `ClerkUserDirectory`'s default for
+      // `clerkUserId`, so this race collides on `clerk_user_id` alone —
+      // exactly the constraint this test means to exercise.
+      await prisma.user.create({ data: { clerkUserId, friendCode, email: `${friendCode}@winner.test` } });
       return null;
     }
     return realFindUnique(args);
@@ -69,7 +72,7 @@ describe('UsersService.findOrCreateByClerkUserId under a genuine race', () => {
 
   it('draws a new Friend Code when the first draw collides with someone else’s', async () => {
     await testApp.prisma.user.create({
-      data: { clerkUserId: 'user_squatter', friendCode: 'TAKEN2' },
+      data: { clerkUserId: 'user_squatter', friendCode: 'TAKEN2', email: 'user_squatter@example.test' },
     });
     // First draw collides with the row above; second draw is free.
     testApp.stubs.friendCodes.queue('TAKEN2', 'FREEE2');

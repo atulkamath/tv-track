@@ -1,3 +1,4 @@
+import type { ClerkUserDirectory } from '../src/auth/clerk-user-directory';
 import type { LlmClient } from '../src/integrations/llm/llm-client';
 import type { TmdbClient } from '../src/integrations/tmdb/tmdb-client';
 import type { TokenVerifier } from '../src/auth/token-verifier';
@@ -43,6 +44,28 @@ export class StubFriendCodeGenerator {
 
   reset(): void {
     this.queued.length = 0;
+  }
+}
+
+/**
+ * Stands in for Clerk's user directory. Every Clerk id gets a deterministic
+ * email unless a test overrides it — so existing tests that only care about
+ * `clerkUserId` need no changes, while friend-request tests can pin an exact
+ * address to look up against.
+ */
+export class StubClerkUserDirectory implements ClerkUserDirectory {
+  private readonly overrides = new Map<string, string>();
+
+  setEmail(clerkUserId: string, email: string): void {
+    this.overrides.set(clerkUserId, email);
+  }
+
+  async getPrimaryEmail(clerkUserId: string): Promise<string> {
+    return this.overrides.get(clerkUserId) ?? `${clerkUserId}@example.test`;
+  }
+
+  reset(): void {
+    this.overrides.clear();
   }
 }
 

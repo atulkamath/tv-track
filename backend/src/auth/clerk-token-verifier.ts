@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { verifyToken } from '@clerk/backend';
+import { requireConfigValue } from './require-config-value';
 import type { TokenVerifier } from './token-verifier';
 
 @Injectable()
@@ -8,11 +9,7 @@ export class ClerkTokenVerifier implements TokenVerifier {
   private readonly secretKey: string;
 
   constructor(config: ConfigService) {
-    const secretKey = config.get<string>('CLERK_SECRET_KEY');
-    if (!secretKey) {
-      throw new Error('CLERK_SECRET_KEY is not set — the API cannot verify any request.');
-    }
-    this.secretKey = secretKey;
+    this.secretKey = requireConfigValue(config, 'CLERK_SECRET_KEY');
   }
 
   async verify(token: string): Promise<string> {

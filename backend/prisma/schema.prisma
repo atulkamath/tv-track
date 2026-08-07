@@ -13,12 +13,57 @@ model User {
   id          String   @id @default(uuid()) @db.Uuid
   /// Clerk's subject id (`sub` claim). The identity we key everything off.
   clerkUserId String   @unique @map("clerk_user_id")
+  /// Backfilled from Clerk (see `ClerkUserDirectory`) the same moment the row
+  /// is lazily created. Used, alongside Friend Code, to look someone up when
+  /// sending a Friend Request (CONTEXT.md).
+  email       String   @unique
   /// 6-char lookup code, regenerable. See CONTEXT.md → Friend Code.
   friendCode  String   @unique @map("friend_code")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  sentFriendRequests     FriendRequest[] @relation("SentFriendRequests")
+  receivedFriendRequests FriendRequest[] @relation("ReceivedFriendRequests")
+  friendshipsAsUser      Friendship[]    @relation("FriendshipsAsUser")
+  friendshipsAsFriend    Friendship[]    @relation("FriendshipsAsFriend")
+
   @@map("users")
+}
+
+/// An invitation from one User to another to become Friends (CONTEXT.md).
+/// Exists only while pending — accept turns it into a Friendship and decline
+/// deletes it, so this table always holds pending requests only, never a
+/// history.
+model FriendRequest {
+  id          String   @id @default(uuid()) @db.Uuid
+  sender      User     @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId    String   @map("sender_id") @db.Uuid
+  recipient   User     @relation("ReceivedFriendRequests", fields: [recipientId], references: [id], onDelete: Cascade)
+  recipientId String   @map("recipient_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Prevents a second identical pending request from the same sender to the
+  // same recipient; FriendRequestsService also treats hitting this as a
+  // benign convergence rather than an error (see UsersService's Friend Code
+  // race handling for the same pattern).
+  @@unique([senderId, recipientId])
+  @@map("friend_requests")
+}
+
+/// A mutual, accepted connection between two Users (CONTEXT.md). Stored as one
+/// row per direction so "my Friends" is a plain `WHERE user_id = me` query —
+/// no unfriending exists yet (see docs/mvp-scope.md), so keeping both
+/// directions in sync is only ever an insert, never a delete.
+model Friendship {
+  id        String   @id @default(uuid()) @db.Uuid
+  user      User     @relation("FriendshipsAsUser", fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id") @db.Uuid
+  friend    User     @relation("FriendshipsAsFriend", fields: [friendId], references: [id], onDelete: Cascade)
+  friendId  String   @map("friend_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, friendId])
+  @@map("friendships")
 }
 
 /// The shared TMDB catalog mirror (ADR 0002) — owned by no User. Populated the
