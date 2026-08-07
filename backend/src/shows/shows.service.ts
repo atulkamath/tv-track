@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TMDB_CLIENT, type TmdbClient, type TmdbShowSummary } from '../integrations/tmdb/tmdb-client';
 import type { CreateShowDto } from './create-show.dto';
 import { toShowCardDto, toShowDetailDto, type ShowCardDto, type ShowDetailDto, type ShowTree } from './show.dto';
+import type { ToggleWatchedDto } from './toggle-watched.dto';
 
 /** `Show.seasons[].episodes[].watchedBy` filtered to one caller — see `ShowTree`. */
 function showTreeInclude(userId: string) {
@@ -103,6 +104,76 @@ export class ShowsService {
       throw new NotFoundException('Show not found.');
     }
     return toShowDetailDto(show);
+  }
+
+  /**
+   * Backs `PUT /shows/:id/episodes/:episodeId`. `dto.watched` is the target
+   * state, not a flip — marking an already-watched episode watched (or an
+   * already-unwatched one unwatched) is a no-op, which is what makes this a
+   * true idempotent PUT rather than a toggle.
+   */
+  async setEpisodeWatched(user: User, showId: string, episodeId: string, dto: ToggleWatchedDto): Promise<ShowDetailDto> {
+    const episode = await this.prisma.episode.findFirst({ where: { id: episodeId, season: { showId } } });
+    if (!episode) {
+      throw new NotFoundException('Episode not found.');
+    }
+
+    if (dto.watched) {
+      await this.prisma.watchedEpisode.upsert({
+        where: { userId_episodeId: { userId: user.id, episodeId } },
+        create: { userId: user.id, episodeId },
+        update: {},
+      });
+    } else {
+      await this.prisma.watchedEpisode.deleteMany({ where: { userId: user.id, episodeId } });
+    }
+
+    return this.getShowDetail(user, showId);
+  }
+
+  /**
+   * Backs `PUT /shows/:id/seasons/:seasonNumber`. Marks/unmarks every episode
+   * in the season in one shot — same target-state idempotency as the episode
+   * toggle, just applied to the whole set.
+   */
+  async setSeasonWatched(user: User, showId: string, seasonNumber: number, dto: ToggleWatchedDto): Promise<ShowDetailDto> {
+    const season = await this.prisma.season.findFirst({
+      where: { showId, seasonNumber },
+      include: { episodes: true },
+    });
+    if (!season) {
+      throw new NotFoundException('Season not found.');
+    }
+
+    const episodeIds = season.episodes.map((episode) => episode.id);
+
+    if (dto.watched) {
+      await this.prisma.watchedEpisode.createMany({
+        data: episodeIds.map((episodeId) => ({ userId: user.id, episodeId })),
+        skipDuplicates: true,
+      });
+    } else {
+      await this.prisma.watchedEpisode.deleteMany({ where: { userId: user.id, episodeId: { in: episodeIds } } });
+    }
+
+    return this.getShowDetail(user, showId);
+  }
+
+  /**
+   * Backs `DELETE /shows/:id`. Removes only the caller's own `WatchedEpisode`
+   * rows for this show — the TMDB mirror (`Show`/`Season`/`Episode`) is shared
+   * (ADR 0002) and is never touched, so another user's copy of the same show,
+   * and their Watch Time, are unaffected.
+   */
+  async removeShow(user: User, showId: string): Promise<void> {
+    const show = await this.prisma.show.findUnique({ where: { id: showId } });
+    if (!show) {
+      throw new NotFoundException('Show not found.');
+    }
+
+    await this.prisma.watchedEpisode.deleteMany({
+      where: { userId: user.id, episode: { season: { showId } } },
+    });
   }
 
   /** Backs `GET /me/watch-time` — summed live, never stored (CONTEXT.md → Watch Time). */
