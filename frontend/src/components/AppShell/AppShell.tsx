@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Wordmark } from "@/components/Wordmark/Wordmark";
 
 export type NavKey = "home" | "leaderboard" | "settings";
 
@@ -64,9 +65,7 @@ export function AppShell({ active, onNavigate, children }: AppShellProps) {
         aria-label="Primary"
         className="hidden min-[720px]:flex min-[720px]:w-60 min-[720px]:flex-col min-[720px]:gap-1 min-[720px]:border-r min-[720px]:border-[var(--line)] min-[720px]:py-6 min-[720px]:px-4"
       >
-        <div className="mx-2 mb-8 text-[17px] font-extrabold tracking-[-0.01em]">
-          tv<span className="text-primary">·</span>track
-        </div>
+        <Wordmark className="mx-2 mb-8" />
         <NavList active={active} onNavigate={onNavigate} variant="sidebar" />
       </nav>
       <nav

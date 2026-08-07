@@ -1,31 +1,17 @@
-"use client";
+import { Show } from "@clerk/nextjs";
+import { Hero } from "@/components/Hero/Hero";
+import { Home } from "@/components/Home/Home";
 
-import { useState } from "react";
-import { AppShell, type NavKey } from "@/components/AppShell/AppShell";
-import { PosterGrid } from "@/components/PosterGrid/PosterGrid";
-import { Leaderboard } from "@/components/Leaderboard/Leaderboard";
-
-export default function Home() {
-  const [active, setActive] = useState<NavKey>("home");
-
+/**
+ * Signed-out visitors get the one-screen hero (docs/design.md); a signed-in
+ * visit goes straight to Home and never back to the hero. `<Show/>` renders
+ * nothing while Clerk is still resolving the session, so there's no flash of
+ * the wrong surface either way.
+ */
+export default function Page() {
   return (
-    <AppShell active={active} onNavigate={setActive}>
-      {renderScreen(active, () => setActive("settings"))}
-    </AppShell>
+    <Show when="signed-in" fallback={<Hero />}>
+      <Home />
+    </Show>
   );
-}
-
-// Settings has no screen yet — a later ticket's job — so its tab renders
-// nothing rather than inventing placeholder copy this ticket wasn't asked
-// for. "Add a friend" routes there since that's where docs/design.md puts
-// the real affordance ("Settings = ... Add a friend, Pending requests.").
-function renderScreen(active: NavKey, onAddFriend: () => void) {
-  switch (active) {
-    case "home":
-      return <PosterGrid />;
-    case "leaderboard":
-      return <Leaderboard onAddFriend={onAddFriend} />;
-    case "settings":
-      return null;
-  }
 }

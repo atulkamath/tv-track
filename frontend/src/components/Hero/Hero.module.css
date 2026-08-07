@@ -1,0 +1,54 @@
+/* One-screen signed-out landing (docs/design.md → "Entry, auth, empty, and
+   error surfaces"): wordmark, tagline, Sign in / Sign up, mock poster grid. */
+.hero {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.wordmark {
+  font-size: 28px;
+}
+
+.tagline {
+  max-width: 32ch;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--muted-hi);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.button {
+  padding: 10px var(--space-5);
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.signIn {
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.signUp {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  box-shadow: var(--shadow-card);
+}
+
+.posters {
+  width: 100%;
+  max-width: 960px;
+}
