@@ -183,4 +183,71 @@ describe("PosterGrid", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByText("BB")).toBeInTheDocument();
   });
+
+  it("opens the show detail modal for that show's id when a poster tile is clicked", async () => {
+    mockShows([FULL_SHOW, PARTIAL_SHOW]);
+    server.use(
+      http.get(`${API_URL}/shows/${PARTIAL_SHOW.id}`, () =>
+        HttpResponse.json({
+          id: PARTIAL_SHOW.id,
+          title: PARTIAL_SHOW.title,
+          poster_path: PARTIAL_SHOW.poster_path,
+          seasons: [
+            {
+              season_number: 1,
+              watch_state: "partial",
+              episodes: [
+                { id: "e1", episode_number: 1, runtime_minutes: 45, watched: true },
+                { id: "e2", episode_number: 2, runtime_minutes: 45, watched: false },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp(<PosterGrid />);
+
+    await screen.findAllByTestId("poster-tile");
+    await user.click(screen.getByRole("button", { name: `Open ${PARTIAL_SHOW.title}` }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(PARTIAL_SHOW.title);
+    expect(dialog).toHaveTextContent("1 of 2 watched");
+  });
+
+  it("refetches GET /shows after a modal-driven delete, so the tile disappears without a page reload", async () => {
+    mockShows([FULL_SHOW]);
+    server.use(
+      http.get(`${API_URL}/shows/${FULL_SHOW.id}`, () =>
+        HttpResponse.json({
+          id: FULL_SHOW.id,
+          title: FULL_SHOW.title,
+          poster_path: FULL_SHOW.poster_path,
+          seasons: [
+            {
+              season_number: 1,
+              watch_state: "full",
+              episodes: [{ id: "e1", episode_number: 1, runtime_minutes: 45, watched: true }],
+            },
+          ],
+        }),
+      ),
+      http.delete(`${API_URL}/shows/${FULL_SHOW.id}`, () => new HttpResponse(null, { status: 204 })),
+    );
+    const user = userEvent.setup();
+    renderApp(<PosterGrid />);
+
+    await user.click(await screen.findByRole("button", { name: `Open ${FULL_SHOW.title}` }));
+    await screen.findByRole("dialog");
+
+    // The show is gone once the modal's delete succeeds — mock the refetch
+    // it triggers to return an empty list.
+    mockShows([]);
+    await user.click(screen.getByRole("button", { name: "Delete show" }));
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+
+    await screen.findByText(/nothing here yet/i);
+    expect(screen.queryByTestId("poster-tile")).not.toBeInTheDocument();
+  });
 });

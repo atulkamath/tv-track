@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { PosterArt } from "@/lib/poster-art";
+import { ShowDetailModal } from "@/components/ShowDetailModal/ShowDetailModal";
 
 /** The NestJS backend this frontend calls cross-origin (ADR 0004). Same constant Home.tsx defines for its own fetch. */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -98,34 +99,45 @@ export function PosterGrid({ onOpenPalette, refreshKey }: PosterGridProps = {}) 
   const { getToken } = useAuth();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [percentByShowId, setPercentByShowId] = useState<Record<string, number>>({});
+  const [selectedShowId, setSelectedShowId] = useState<string | null>(null);
   const fetchedPercentIds = useRef(new Set<string>());
 
-  useEffect(() => {
-    let cancelled = false;
+  // Extracted (rather than left inline in the mount effect) so a
+  // ShowDetailModal-driven change (#10 — an episode/season toggle or a
+  // delete) can re-invoke it too, keeping the grid from going stale without
+  // hand-rolling a partial local-state patch. Clears `fetchedPercentIds` on
+  // every call, not just mount, so a show whose watched fraction changed via
+  // the modal gets its poster percentage recomputed rather than serving the
+  // stale cached one — Partial shows are otherwise never fetched twice.
+  const loadShows = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
 
-    async function loadShows() {
-      const token = await getToken();
-      if (!token || cancelled) return;
-
-      try {
-        const response = await fetch(`${API_URL}/shows`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) throw new Error(`GET /shows failed: ${response.status}`);
-        const cards = (await response.json()) as ShowCardWire[];
-        if (!cancelled) setState({ status: "ready", shows: cards.map(mapShow) });
-      } catch {
-        if (!cancelled) setState({ status: "error" });
-      }
+    try {
+      const response = await fetch(`${API_URL}/shows`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`GET /shows failed: ${response.status}`);
+      const cards = (await response.json()) as ShowCardWire[];
+      fetchedPercentIds.current.clear();
+      setState({ status: "ready", shows: cards.map(mapShow) });
+    } catch {
+      setState({ status: "error" });
     }
+  }, [getToken]);
 
-    void loadShows();
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    // Wrapped in its own async IIFE, matching SpotlightPalette.tsx's
+    // cancellation pattern — the react-hooks lint (no synchronous setState
+    // in an effect) flags a stateful callback invoked directly in an
+    // effect's own scope, but not one reached through an async function the
+    // effect merely kicks off.
+    void (async () => {
+      await loadShows();
+    })();
     // `refreshKey` isn't read above — it's a deliberate re-fetch trigger the
     // caller bumps after a Spotlight-palette add, per #8.
-  }, [getToken, refreshKey]);
+  }, [loadShows, refreshKey]);
 
   useEffect(() => {
     if (state.status !== "ready") return;
@@ -186,35 +198,48 @@ export function PosterGrid({ onOpenPalette, refreshKey }: PosterGridProps = {}) 
     }));
   }
 
+  let content: ReactNode;
   if (state.status === "loading") {
-    return (
+    content = (
       <p role="status" className="text-sm text-muted-foreground">
         Loading your shows…
       </p>
     );
-  }
-
-  if (state.status === "error") {
-    return (
+  } else if (state.status === "error") {
+    content = (
       <p role="alert" className="text-sm text-muted-foreground">
         Couldn&apos;t load your shows. Try refreshing.
       </p>
     );
-  }
-
-  if (state.shows.length === 0) {
-    return <EmptyState onAddExample={handleAddExample} onOpenPalette={onOpenPalette} />;
+  } else if (state.shows.length === 0) {
+    content = <EmptyState onAddExample={handleAddExample} onOpenPalette={onOpenPalette} />;
+  } else {
+    content = (
+      <ul
+        className="grid list-none grid-cols-3 gap-4 min-[720px]:grid-cols-[repeat(auto-fill,minmax(168px,1fr))]"
+        aria-label="Shows"
+      >
+        {state.shows.map((show) => (
+          <PosterTile key={show.id} show={show} percent={percentByShowId[show.id]} onSelect={() => setSelectedShowId(show.id)} />
+        ))}
+      </ul>
+    );
   }
 
   return (
-    <ul
-      className="grid list-none grid-cols-3 gap-4 min-[720px]:grid-cols-[repeat(auto-fill,minmax(168px,1fr))]"
-      aria-label="Shows"
-    >
-      {state.shows.map((show) => (
-        <PosterTile key={show.id} show={show} percent={percentByShowId[show.id]} />
-      ))}
-    </ul>
+    <>
+      {content}
+      {/* Rendered alongside every branch above (not just the populated grid)
+          so a selection made before a refetch settles doesn't get
+          unexpectedly unmounted mid-interaction — e.g. if the follow-up
+          `GET /shows` triggered by `onChanged` itself fails. */}
+      <ShowDetailModal
+        showId={selectedShowId}
+        open={selectedShowId !== null}
+        onClose={() => setSelectedShowId(null)}
+        onChanged={() => void loadShows()}
+      />
+    </>
   );
 }
 
@@ -245,7 +270,7 @@ function EmptyState({
   );
 }
 
-function PosterTile({ show, percent }: { show: Show; percent?: number }) {
+function PosterTile({ show, percent, onSelect }: { show: Show; percent?: number; onSelect: () => void }) {
   const isFull = show.watchState === "full";
   const isPartial = show.watchState === "partial";
   const isNone = show.watchState === "none";
@@ -260,26 +285,32 @@ function PosterTile({ show, percent }: { show: Show; percent?: number }) {
         isNone && "brightness-[.6] saturate-[.8] hover:brightness-100 hover:saturate-100",
       )}
     >
-      <PosterArt title={show.title} posterUrl={show.posterUrl} />
-      {isFull && (
-        <span
-          aria-label="Full"
-          className="absolute top-2 right-2 flex size-[22px] items-center justify-center rounded-full bg-[var(--full)] text-white"
-        >
-          <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />
+      {/* The li carries the tile's identity/styling (data-testid, dimmed
+          state, hover scale); this button is just the click/focus target —
+          opening the show detail modal (#10) and, per its Modal, getting
+          the triggering-element focus restore for free on close. */}
+      <button type="button" onClick={onSelect} aria-label={`Open ${show.title}`} className="absolute inset-0 size-full text-left">
+        <PosterArt title={show.title} posterUrl={show.posterUrl} />
+        {isFull && (
+          <span
+            aria-label="Full"
+            className="absolute top-2 right-2 flex size-[22px] items-center justify-center rounded-full bg-[var(--full)] text-white"
+          >
+            <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />
+          </span>
+        )}
+        {isPartial && percent !== undefined && (
+          <span className="absolute right-1.5 bottom-2.5 text-[11px] font-bold text-white">{percent}%</span>
+        )}
+        <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-2 pt-6 pb-2 text-sm font-bold text-white">
+          {show.title}
         </span>
-      )}
-      {isPartial && percent !== undefined && (
-        <span className="absolute right-1.5 bottom-2.5 text-[11px] font-bold text-white">{percent}%</span>
-      )}
-      <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-2 pt-6 pb-2 text-sm font-bold text-white">
-        {show.title}
-      </span>
-      {!isNone && (
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-[var(--surface-2)]">
-          <div className="h-full bg-[var(--accent-solid)]" style={{ width: `${fillPercent}%` }} />
-        </div>
-      )}
+        {!isNone && (
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-[var(--surface-2)]">
+            <div className="h-full bg-[var(--accent-solid)]" style={{ width: `${fillPercent}%` }} />
+          </div>
+        )}
+      </button>
     </li>
   );
 }
