@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
+import { Plus } from "lucide-react";
 import { AppShell, type NavKey } from "@/components/AppShell/AppShell";
 import { PosterGrid } from "@/components/PosterGrid/PosterGrid";
 import { Leaderboard } from "@/components/Leaderboard/Leaderboard";
+import { SpotlightPalette } from "@/components/SpotlightPalette/SpotlightPalette";
+import { Button } from "@/components/ui/button";
 
 /** The NestJS backend this frontend calls cross-origin (ADR 0004). */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -21,6 +24,11 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001
  */
 export function Home() {
   const [active, setActive] = useState<NavKey>("home");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // Bumped after a successful Spotlight-palette add so PosterGrid — which
+  // owns its own `GET /shows` fetch — refetches rather than going stale
+  // (#8: "the poster grid should end up showing it").
+  const [showsRefreshKey, setShowsRefreshKey] = useState(0);
   const { getToken } = useAuth();
   const router = useRouter();
 
@@ -47,9 +55,26 @@ export function Home() {
   }, [getToken, router]);
 
   return (
-    <AppShell active={active} onNavigate={setActive}>
-      {renderScreen(active, () => setActive("settings"))}
-    </AppShell>
+    <>
+      <AppShell active={active} onNavigate={setActive}>
+        {renderScreen(active, () => setActive("settings"), () => setPaletteOpen(true), showsRefreshKey)}
+      </AppShell>
+      {/* The Spotlight palette's FAB (#8, docs/design.md): full-round,
+          accent-colored, bottom-right, persistent across tabs — rendered
+          at the Home level rather than per-screen. */}
+      <Button
+        onClick={() => setPaletteOpen(true)}
+        aria-label="Log watching"
+        className="fixed right-6 bottom-6 z-20 size-14 rounded-full p-0 shadow-modal"
+      >
+        <Plus className="size-6" aria-hidden="true" />
+      </Button>
+      <SpotlightPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onShowAdded={() => setShowsRefreshKey((key) => key + 1)}
+      />
+    </>
   );
 }
 
@@ -57,10 +82,15 @@ export function Home() {
 // nothing rather than inventing placeholder copy this ticket wasn't asked
 // for. "Add a friend" routes there since that's where docs/design.md puts
 // the real affordance ("Settings = ... Add a friend, Pending requests.").
-function renderScreen(active: NavKey, onAddFriend: () => void) {
+function renderScreen(
+  active: NavKey,
+  onAddFriend: () => void,
+  onOpenPalette: () => void,
+  showsRefreshKey: number,
+) {
   switch (active) {
     case "home":
-      return <PosterGrid />;
+      return <PosterGrid onOpenPalette={onOpenPalette} refreshKey={showsRefreshKey} />;
     case "leaderboard":
       return <Leaderboard onAddFriend={onAddFriend} />;
     case "settings":

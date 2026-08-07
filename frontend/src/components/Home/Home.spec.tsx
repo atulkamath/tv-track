@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
+import userEvent from "@testing-library/user-event";
 import { renderApp, screen, waitFor } from "../../../test/render";
 import { server } from "../../../test/server";
 import { Home, API_URL } from "./Home";
@@ -67,5 +68,35 @@ describe("Home", () => {
       }),
     );
     expect(() => renderApp(<Home />)).not.toThrow();
+  });
+
+  it("opens the Spotlight palette from the persistent FAB", async () => {
+    // No `/me` handler mocked here — opening the palette makes no network
+    // call by itself (search only fires once a query is typed) — so give
+    // `getToken` a null token, same as the tests above that don't care
+    // about the `/me` call, to avoid an unhandled-request error.
+    mockGetToken.mockResolvedValue(null);
+    const user = userEvent.setup();
+    renderApp(<Home />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Log watching" }));
+
+    expect(await screen.findByRole("dialog", { name: "Spotlight palette" })).toBeInTheDocument();
+  });
+
+  it("opens the Spotlight palette from the poster grid's + Log watching empty-state button too", async () => {
+    // Needs a real token so PosterGrid's own `GET /shows` actually resolves
+    // to the empty state (a null token leaves it stuck loading) — mock
+    // `/me` too so that call doesn't go unhandled.
+    mockGetToken.mockResolvedValue("token-123");
+    server.use(http.get(`${API_URL}/me`, () => HttpResponse.json({ id: "u1", friend_code: "ABC123" })));
+    const user = userEvent.setup();
+    renderApp(<Home />);
+
+    await screen.findByText(/nothing here yet/i);
+    await user.click(screen.getByRole("button", { name: "+ Log watching" }));
+
+    expect(await screen.findByRole("dialog", { name: "Spotlight palette" })).toBeInTheDocument();
   });
 });

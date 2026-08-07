@@ -120,6 +120,30 @@ describe("PosterGrid", () => {
     expect(screen.getByRole("button", { name: "+ Log watching" })).toBeInTheDocument();
   });
 
+  it("opens the Spotlight palette when + Log watching is clicked", async () => {
+    mockShows([]);
+    const onOpenPalette = vi.fn();
+    renderApp(<PosterGrid onOpenPalette={onOpenPalette} />);
+
+    await screen.findByText(/nothing here yet/i);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "+ Log watching" }));
+
+    expect(onOpenPalette).toHaveBeenCalledOnce();
+  });
+
+  it("refetches GET /shows when refreshKey changes, so an add via the Spotlight palette doesn't leave the grid stale", async () => {
+    mockShows([]);
+    const { rerender } = renderApp(<PosterGrid refreshKey={0} />);
+    await screen.findByText(/nothing here yet/i);
+
+    mockShows([FULL_SHOW]);
+    rerender(<PosterGrid refreshKey={1} />);
+
+    await screen.findByTestId("poster-tile");
+    expect(screen.queryByText(/nothing here yet/i)).not.toBeInTheDocument();
+  });
+
   it("adds a show to the wall when an empty-state example is clicked", async () => {
     mockShows([]);
     let receivedBody: unknown;

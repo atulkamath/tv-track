@@ -5,6 +5,7 @@ import { useAuth } from "@clerk/nextjs";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { PosterArt } from "@/lib/poster-art";
 
 /** The NestJS backend this frontend calls cross-origin (ADR 0004). Same constant Home.tsx defines for its own fetch. */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -86,7 +87,14 @@ const EMPTY_STATE_EXAMPLES: { label: string; tmdbId: number }[] = [
  * `watch_state` would let the grid render correct percentages in one
  * request instead of N+1 — worth a follow-up ticket.
  */
-export function PosterGrid() {
+interface PosterGridProps {
+  /** Opens the Spotlight palette (#8) — wired to the "+ Log watching" empty-state button. Optional so existing call sites/tests that don't care about the palette don't have to pass a no-op. */
+  onOpenPalette?: () => void;
+  /** Bumped by the caller (Home) after a Spotlight-palette add so this component refetches `GET /shows` and the grid doesn't go stale. */
+  refreshKey?: number;
+}
+
+export function PosterGrid({ onOpenPalette, refreshKey }: PosterGridProps = {}) {
   const { getToken } = useAuth();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [percentByShowId, setPercentByShowId] = useState<Record<string, number>>({});
@@ -115,7 +123,9 @@ export function PosterGrid() {
     return () => {
       cancelled = true;
     };
-  }, [getToken]);
+    // `refreshKey` isn't read above — it's a deliberate re-fetch trigger the
+    // caller bumps after a Spotlight-palette add, per #8.
+  }, [getToken, refreshKey]);
 
   useEffect(() => {
     if (state.status !== "ready") return;
@@ -193,7 +203,7 @@ export function PosterGrid() {
   }
 
   if (state.shows.length === 0) {
-    return <EmptyState onAddExample={handleAddExample} />;
+    return <EmptyState onAddExample={handleAddExample} onOpenPalette={onOpenPalette} />;
   }
 
   return (
@@ -208,15 +218,20 @@ export function PosterGrid() {
   );
 }
 
-function EmptyState({ onAddExample }: { onAddExample: (tmdbId: number) => void }) {
+function EmptyState({
+  onAddExample,
+  onOpenPalette,
+}: {
+  onAddExample: (tmdbId: number) => void;
+  onOpenPalette?: () => void;
+}) {
   return (
     <div className="mx-auto flex max-w-[420px] flex-col items-center gap-5 py-16 text-center">
       <p className="text-sm text-muted-foreground">
         Nothing here yet. Type what you watch — we do the rest.
       </p>
-      {/* The Spotlight palette (#8) is what this should open — not built yet,
-          so this is a stub that can't crash rather than a fake palette. */}
-      <Button size="lg" onClick={() => {}}>
+      {/* Opens the Spotlight palette (#8). */}
+      <Button size="lg" onClick={() => onOpenPalette?.()}>
         + Log watching
       </Button>
       <div className="flex flex-wrap justify-center gap-2">
@@ -269,39 +284,3 @@ function PosterTile({ show, percent }: { show: Show; percent?: number }) {
   );
 }
 
-function PosterArt({ title, posterUrl }: { title: string; posterUrl: string | null }) {
-  const [errored, setErrored] = useState(false);
-  const showFallback = !posterUrl || errored;
-
-  return (
-    <div
-      className="relative flex size-full items-center justify-center text-lg font-bold text-white"
-      style={{ background: seededGradient(title) }}
-    >
-      {!showFallback && (
-        <img
-          src={posterUrl}
-          alt={title}
-          className="absolute inset-0 size-full object-cover"
-          onError={() => setErrored(true)}
-        />
-      )}
-      {showFallback && <span aria-hidden="true">{initials(title)}</span>}
-    </div>
-  );
-}
-
-function initials(title: string): string {
-  const parts = title.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return (parts[0]![0] + parts[parts.length - 1]![0]).toUpperCase();
-}
-
-/** Deterministic per-title background so a missing/unloaded poster is still readable and distinct, not a flat gray box. */
-function seededGradient(seed: string): string {
-  let hash = 0;
-  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  const hue = hash % 360;
-  return `linear-gradient(160deg, hsl(${hue} 45% 22%), hsl(${(hue + 40) % 360} 40% 12%))`;
-}
