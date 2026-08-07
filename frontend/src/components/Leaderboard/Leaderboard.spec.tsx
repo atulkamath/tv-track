@@ -1,22 +1,42 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import userEvent from "@testing-library/user-event";
 import { server } from "../../../test/server";
 import { renderApp, screen } from "../../../test/render";
-import { Leaderboard, type LeaderboardEntry } from "./Leaderboard";
+import { Leaderboard } from "./Leaderboard";
+import { API_URL } from "../Home/Home";
 
-function mockLeaderboard(entries: LeaderboardEntry[]) {
-  server.use(http.get("/leaderboard", () => HttpResponse.json(entries)));
+const mockGetToken = vi.fn();
+
+vi.mock("@clerk/nextjs", () => ({
+  useAuth: () => ({ getToken: mockGetToken }),
+}));
+
+beforeEach(() => {
+  mockGetToken.mockReset();
+  mockGetToken.mockResolvedValue("token-123");
+});
+
+/** The backend's actual wire shape — snake_case, email as the only identifying string. */
+interface EntryResponse {
+  id: string;
+  email: string;
+  watch_time_minutes: number;
+  is_self: boolean;
+}
+
+function mockLeaderboard(entries: EntryResponse[]) {
+  server.use(http.get(`${API_URL}/leaderboard`, () => HttpResponse.json(entries)));
 }
 
 // 29d 2h, per docs/design.md's exact example.
 const TWENTY_NINE_DAYS_TWO_HOURS = 29 * 24 * 60 + 2 * 60;
 
-const FOUR_ROWS: LeaderboardEntry[] = [
-  { id: "1", name: "Priya Shah", avatarUrl: null, watchTimeMinutes: TWENTY_NINE_DAYS_TWO_HOURS, isSelf: false },
-  { id: "2", name: "Sam Okafor", avatarUrl: null, watchTimeMinutes: 20_000, isSelf: false },
-  { id: "3", name: "Alex Kim", avatarUrl: null, watchTimeMinutes: 15_000, isSelf: true },
-  { id: "4", name: "Jo Rivera", avatarUrl: null, watchTimeMinutes: 5_000, isSelf: false },
+const FOUR_ROWS: EntryResponse[] = [
+  { id: "1", email: "priya@example.test", watch_time_minutes: TWENTY_NINE_DAYS_TWO_HOURS, is_self: false },
+  { id: "2", email: "sam@example.test", watch_time_minutes: 20_000, is_self: false },
+  { id: "3", email: "alex@example.test", watch_time_minutes: 15_000, is_self: true },
+  { id: "4", email: "jo@example.test", watch_time_minutes: 5_000, is_self: false },
 ];
 
 describe("Leaderboard", () => {
@@ -32,10 +52,10 @@ describe("Leaderboard", () => {
 
     const rows = await screen.findAllByRole("listitem");
     expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("Priya Shah"),
-      expect.stringContaining("Sam Okafor"),
-      expect.stringContaining("Alex Kim"),
-      expect.stringContaining("Jo Rivera"),
+      expect.stringContaining("priya@example.test"),
+      expect.stringContaining("sam@example.test"),
+      expect.stringContaining("alex@example.test"),
+      expect.stringContaining("jo@example.test"),
     ]);
 
     const [first, second, third, fourth] = screen.getAllByText(/^[1-4]$/);
@@ -54,7 +74,7 @@ describe("Leaderboard", () => {
 
     expect(screen.getAllByText("YOU")).toHaveLength(1);
 
-    const selfRow = rows[2]!; // Alex Kim, isSelf: true
+    const selfRow = rows[2]!; // alex@example.test, is_self: true
     expect(selfRow).toHaveClass("border-primary");
     expect(selfRow).toHaveClass("bg-primary/10");
 
@@ -75,7 +95,7 @@ describe("Leaderboard", () => {
   });
 
   it("shows an inviting empty state with an add-friend affordance when there are zero friends", async () => {
-    mockLeaderboard([{ id: "1", name: "Alex Kim", avatarUrl: null, watchTimeMinutes: 100, isSelf: true }]);
+    mockLeaderboard([{ id: "1", email: "alex@example.test", watch_time_minutes: 100, is_self: true }]);
     const onAddFriend = vi.fn();
     renderApp(<Leaderboard onAddFriend={onAddFriend} />);
 
@@ -88,7 +108,7 @@ describe("Leaderboard", () => {
   });
 
   it("shows an inline error if the request fails", async () => {
-    server.use(http.get("/leaderboard", () => HttpResponse.error()));
+    server.use(http.get(`${API_URL}/leaderboard`, () => HttpResponse.error()));
     renderApp(<Leaderboard />);
     await screen.findByRole("alert");
   });

@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatWatchTime } from "@/lib/format-watch-time";
+import { API_URL } from "@/components/Home/Home";
 
 export interface LeaderboardEntry {
   id: string;
@@ -28,6 +30,26 @@ type LoadState =
 
 const PODIUM_CLASSES = ["text-gold", "text-silver", "text-bronze"] as const;
 
+/** The backend's wire shape (snake_case) for one row — see `backend/src/leaderboard/leaderboard.dto.ts`. */
+interface LeaderboardEntryResponse {
+  id: string;
+  email: string;
+  watch_time_minutes: number;
+  is_self: boolean;
+}
+
+function toLeaderboardEntry(entry: LeaderboardEntryResponse): LeaderboardEntry {
+  // The backend has no display-name concept (users/schema.prisma has no
+  // `name` column) — email is the only identifying string it can offer.
+  return {
+    id: entry.id,
+    name: entry.email,
+    avatarUrl: null,
+    watchTimeMinutes: entry.watch_time_minutes,
+    isSelf: entry.is_self,
+  };
+}
+
 /**
  * Leaderboard = plain ranked list (docs/design.md, max 560px): rank numeral
  * (podium colors top 3), avatar, name, one big right-aligned time. The
@@ -36,21 +58,26 @@ const PODIUM_CLASSES = ["text-gold", "text-silver", "text-bronze"] as const;
  *
  * Owns its `GET /leaderboard` fetch rather than taking data as a prop —
  * frontend tests fake the network via MSW (see Leaderboard.spec.tsx) rather
- * than a live backend, which doesn't have this route yet (#15). The fetch
- * path is relative and unauthenticated for now; wiring a real API base URL
- * and the Clerk token both land with the frontend's auth-integration ticket.
+ * than a live backend.
  */
 export function Leaderboard({ onAddFriend }: LeaderboardProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const { getToken } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
 
-    fetch("/leaderboard")
-      .then((res) => {
-        if (!res.ok) throw new Error(`GET /leaderboard failed: ${res.status}`);
-        return res.json() as Promise<LeaderboardEntry[]>;
-      })
+    async function load() {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/leaderboard`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`GET /leaderboard failed: ${res.status}`);
+      const body = (await res.json()) as LeaderboardEntryResponse[];
+      return body.map(toLeaderboardEntry);
+    }
+
+    load()
       .then((entries) => {
         if (!cancelled) setState({ status: "ready", entries });
       })
@@ -61,7 +88,7 @@ export function Leaderboard({ onAddFriend }: LeaderboardProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [getToken]);
 
   if (state.status === "loading") {
     return (

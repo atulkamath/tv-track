@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module';
 import { FriendsModule } from './friends/friends.module';
 import { HealthController } from './health/health.controller';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ShowsModule } from './shows/shows.module';
 import { UsersModule } from './users/users.module';
@@ -16,6 +17,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     ShowsModule,
     FriendsModule,
+    LeaderboardModule,
     AuthModule,
   ],
   controllers: [HealthController],
