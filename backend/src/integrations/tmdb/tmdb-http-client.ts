@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { TmdbClient, TmdbShowSummary } from './tmdb-client';
+import type { TmdbClient, TmdbShowDetail, TmdbShowSummary } from './tmdb-client';
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
@@ -22,8 +22,25 @@ interface TmdbSearchResponse {
   results: TmdbSearchResult[];
 }
 
-interface TmdbShowDetails {
+interface TmdbShowDetailsResponse {
+  id: number;
+  name: string;
+  first_air_date: string | null;
+  poster_path: string | null;
+  status: string | null;
   number_of_episodes: number | null;
+  seasons: { season_number: number }[];
+}
+
+interface TmdbEpisodeResponse {
+  id: number;
+  episode_number: number;
+  runtime: number | null;
+}
+
+interface TmdbSeasonResponse {
+  id: number;
+  episodes: TmdbEpisodeResponse[];
 }
 
 function parseYear(firstAirDate: string | null): number | null {
@@ -70,8 +87,41 @@ export class TmdbHttpClient implements TmdbClient {
   }
 
   private async fetchEpisodeCount(tmdbId: number): Promise<number> {
-    const details = await this.getJson<TmdbShowDetails>(`/tv/${tmdbId}`);
+    const details = await this.getJson<TmdbShowDetailsResponse>(`/tv/${tmdbId}`);
     return details.number_of_episodes ?? 0;
+  }
+
+  async getShowDetail(tmdbId: number): Promise<TmdbShowDetail> {
+    const details = await this.getJson<TmdbShowDetailsResponse>(`/tv/${tmdbId}`);
+
+    // TMDB always includes a synthetic "Specials" season (season_number 0)
+    // alongside the real, aired ones — excluded here since Watch State/Watch
+    // Time are about the show's actual run, not bonus/behind-the-scenes cuts.
+    const realSeasons = details.seasons.filter(({ season_number }) => season_number > 0);
+
+    const seasons = await Promise.all(
+      realSeasons.map(async ({ season_number }) => {
+        const season = await this.getJson<TmdbSeasonResponse>(`/tv/${tmdbId}/season/${season_number}`);
+        return {
+          tmdbId: season.id,
+          seasonNumber: season_number,
+          episodes: season.episodes.map((episode) => ({
+            tmdbId: episode.id,
+            episodeNumber: episode.episode_number,
+            runtimeMinutes: episode.runtime,
+          })),
+        };
+      }),
+    );
+
+    return {
+      tmdbId: details.id,
+      title: details.name,
+      year: parseYear(details.first_air_date),
+      posterPath: details.poster_path,
+      status: details.status,
+      seasons,
+    };
   }
 
   private async getJson<T>(path: string, params: Record<string, string> = {}): Promise<T> {

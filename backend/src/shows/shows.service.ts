@@ -1,5 +1,24 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import type { User } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { TMDB_CLIENT, type TmdbClient, type TmdbShowSummary } from '../integrations/tmdb/tmdb-client';
+import type { CreateShowDto } from './create-show.dto';
+import { toShowCardDto, toShowDetailDto, type ShowCardDto, type ShowDetailDto, type ShowTree } from './show.dto';
+
+/** `Show.seasons[].episodes[].watchedBy` filtered to one caller — see `ShowTree`. */
+function showTreeInclude(userId: string) {
+  return {
+    seasons: {
+      orderBy: { seasonNumber: 'asc' as const },
+      include: {
+        episodes: {
+          orderBy: { episodeNumber: 'asc' as const },
+          include: { watchedBy: { where: { userId } } },
+        },
+      },
+    },
+  };
+}
 
 /** How long an identical query is served from cache instead of hitting TMDB. */
 const CACHE_TTL_MS = 30_000;
@@ -27,7 +46,10 @@ interface CacheEntry {
 export class ShowsService {
   private readonly cache = new Map<string, CacheEntry>();
 
-  constructor(@Inject(TMDB_CLIENT) private readonly tmdb: TmdbClient) {}
+  constructor(
+    @Inject(TMDB_CLIENT) private readonly tmdb: TmdbClient,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async search(query: string): Promise<TmdbShowSummary[]> {
     const key = normalize(query);
@@ -39,6 +61,98 @@ export class ShowsService {
     const results = await this.tmdb.searchShows(query);
     this.remember(key, results);
     return results;
+  }
+
+  /** Backs `POST /shows`. See `create-show.dto.ts` for the payload shape. */
+  async addShow(user: User, dto: CreateShowDto): Promise<ShowCardDto> {
+    const mirrored = await this.mirrorShow(dto.tmdb_id);
+
+    const targetEpisodeIds = mirrored.seasons
+      .filter((season) => !dto.seasons || dto.seasons.includes(season.seasonNumber))
+      .flatMap((season) => season.episodes.map((episode) => episode.id));
+
+    await this.prisma.watchedEpisode.createMany({
+      data: targetEpisodeIds.map((episodeId) => ({ userId: user.id, episodeId })),
+      skipDuplicates: true,
+    });
+
+    const show = await this.prisma.show.findUniqueOrThrow({
+      where: { id: mirrored.id },
+      include: showTreeInclude(user.id),
+    });
+    return toShowCardDto(show);
+  }
+
+  /** Backs `GET /shows` — every show the caller has watched at least one episode of. */
+  async listShows(user: User): Promise<ShowCardDto[]> {
+    const shows = await this.prisma.show.findMany({
+      where: { seasons: { some: { episodes: { some: { watchedBy: { some: { userId: user.id } } } } } } },
+      include: showTreeInclude(user.id),
+      orderBy: { title: 'asc' },
+    });
+    return shows.map(toShowCardDto);
+  }
+
+  /** Backs `GET /shows/:id` — the full season/episode tree for one show's accordion. */
+  async getShowDetail(user: User, showId: string): Promise<ShowDetailDto> {
+    const show = await this.prisma.show.findUnique({
+      where: { id: showId },
+      include: showTreeInclude(user.id),
+    });
+    if (!show) {
+      throw new NotFoundException('Show not found.');
+    }
+    return toShowDetailDto(show);
+  }
+
+  /** Backs `GET /me/watch-time` — summed live, never stored (CONTEXT.md → Watch Time). */
+  async getWatchTime(user: User): Promise<number> {
+    const watched = await this.prisma.watchedEpisode.findMany({
+      where: { userId: user.id },
+      select: { episode: { select: { runtimeMinutes: true } } },
+    });
+    // An episode with no published runtime contributes nothing — not the same
+    // claim as "this episode is 0 minutes long," but the same arithmetic
+    // either way, so a plain `?? 0` here is correct, not a shortcut.
+    return watched.reduce((total, { episode }) => total + (episode.runtimeMinutes ?? 0), 0);
+  }
+
+  /**
+   * Finds the show already mirrored by `tmdbId`, or fetches it from TMDB and
+   * mirrors it in — this is what makes re-adding an existing show update the
+   * same card instead of duplicating it (ADR 0002).
+   */
+  private async mirrorShow(tmdbId: number) {
+    const existing = await this.prisma.show.findUnique({
+      where: { tmdbId },
+      include: { seasons: { include: { episodes: true } } },
+    });
+    if (existing) return existing;
+
+    const detail = await this.tmdb.getShowDetail(tmdbId);
+    return this.prisma.show.create({
+      data: {
+        tmdbId: detail.tmdbId,
+        title: detail.title,
+        firstAirYear: detail.year,
+        posterPath: detail.posterPath,
+        status: detail.status,
+        seasons: {
+          create: detail.seasons.map((season) => ({
+            tmdbId: season.tmdbId,
+            seasonNumber: season.seasonNumber,
+            episodes: {
+              create: season.episodes.map((episode) => ({
+                tmdbId: episode.tmdbId,
+                episodeNumber: episode.episodeNumber,
+                runtimeMinutes: episode.runtimeMinutes,
+              })),
+            },
+          })),
+        },
+      },
+      include: { seasons: { include: { episodes: true } } },
+    });
   }
 
   private remember(key: string, results: TmdbShowSummary[]): void {

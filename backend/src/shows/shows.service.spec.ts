@@ -11,7 +11,9 @@ describe('ShowsService', () => {
 
   beforeEach(() => {
     tmdb = { searchShows: jest.fn().mockResolvedValue([summary(2316)]) };
-    service = new ShowsService(tmdb as unknown as TmdbClient);
+    // None of these tests touch the database — only `search()`, which never
+    // reaches `prisma` — so an untyped stand-in is enough here.
+    service = new ShowsService(tmdb as unknown as TmdbClient, undefined as never);
     jest.spyOn(Date, 'now').mockReturnValue(0);
   });
 

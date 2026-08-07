@@ -7,5 +7,6 @@ import { ShowsService } from './shows.service';
   imports: [IntegrationsModule],
   controllers: [ShowsController],
   providers: [ShowsService],
+  exports: [ShowsService],
 })
 export class ShowsModule {}

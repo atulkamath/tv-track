@@ -73,7 +73,17 @@ export type StubTmdbClient = { [K in keyof TmdbClient]: jest.Mock };
 export type StubLlmClient = { [K in keyof LlmClient]: jest.Mock };
 
 export function createStubTmdbClient(): StubTmdbClient {
-  return { searchShows: jest.fn().mockResolvedValue([]) };
+  return {
+    searchShows: jest.fn().mockResolvedValue([]),
+    getShowDetail: jest.fn().mockResolvedValue({
+      tmdbId: 0,
+      title: '',
+      year: null,
+      posterPath: null,
+      status: null,
+      seasons: [],
+    }),
+  };
 }
 
 export function createStubLlmClient(): StubLlmClient {

@@ -112,6 +112,7 @@ export async function createTestApp(): Promise<TestApp> {
       friendCodes.reset();
       clerkUsers.reset();
       tmdb.searchShows.mockClear();
+      tmdb.getShowDetail.mockClear();
       llm.parseShowMentions.mockClear();
     },
     async close() {

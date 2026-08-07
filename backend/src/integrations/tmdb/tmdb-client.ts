@@ -11,9 +11,35 @@ export interface TmdbShowSummary {
   episodeCount: number;
 }
 
+export interface TmdbEpisode {
+  tmdbId: number;
+  episodeNumber: number;
+  /** Minutes. Null when TMDB hasn't published a runtime for this episode yet. */
+  runtimeMinutes: number | null;
+}
+
+export interface TmdbSeason {
+  tmdbId: number;
+  seasonNumber: number;
+  episodes: TmdbEpisode[];
+}
+
+export interface TmdbShowDetail {
+  tmdbId: number;
+  title: string;
+  year: number | null;
+  posterPath: string | null;
+  /** TMDB's status string (e.g. "Ended", "Returning Series"). */
+  status: string | null;
+  seasons: TmdbSeason[];
+}
+
 export interface TmdbClient {
   /** Backs `GET /shows/search` — the Spotlight palette's live suggestions. */
   searchShows(query: string): Promise<TmdbShowSummary[]>;
+
+  /** Backs `POST /shows` — the full season/episode tree to mirror locally. */
+  getShowDetail(tmdbId: number): Promise<TmdbShowDetail>;
 }
 
 export const TMDB_CLIENT = Symbol('TMDB_CLIENT');
