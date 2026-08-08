@@ -109,9 +109,22 @@ interface PosterGridProps {
    * newly-resolved tiles glow rather than the whole grid re-rendering.
    */
   glowShowIds?: string[];
+  /**
+   * Fired every time a `GET /shows` attempt settles — success or failure,
+   * always, so a caller gating on it (Home.tsx's Disambiguation Step, #13:
+   * "shown only after resolved shows are already visible") never gets stuck
+   * waiting on a refetch that errored out.
+   */
+  onShowsLoaded?: () => void;
 }
 
-export function PosterGrid({ onOpenPalette, refreshKey, pendingSkeletonCount = 0, glowShowIds = [] }: PosterGridProps = {}) {
+export function PosterGrid({
+  onOpenPalette,
+  refreshKey,
+  pendingSkeletonCount = 0,
+  glowShowIds = [],
+  onShowsLoaded,
+}: PosterGridProps = {}) {
   const { getToken } = useAuth();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [percentByShowId, setPercentByShowId] = useState<Record<string, number>>({});
@@ -127,7 +140,10 @@ export function PosterGrid({ onOpenPalette, refreshKey, pendingSkeletonCount = 0
   // stale cached one — Partial shows are otherwise never fetched twice.
   const loadShows = useCallback(async () => {
     const token = await getToken();
-    if (!token) return;
+    if (!token) {
+      onShowsLoaded?.();
+      return;
+    }
 
     try {
       const response = await fetch(`${API_URL}/shows`, {
@@ -139,8 +155,10 @@ export function PosterGrid({ onOpenPalette, refreshKey, pendingSkeletonCount = 0
       setState({ status: "ready", shows: cards.map(mapShow) });
     } catch {
       setState({ status: "error" });
+    } finally {
+      onShowsLoaded?.();
     }
-  }, [getToken]);
+  }, [getToken, onShowsLoaded]);
 
   useEffect(() => {
     // Wrapped in its own async IIFE, matching SpotlightPalette.tsx's

@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Plus } from "lucide-react";
 import { AppShell, type NavKey } from "@/components/AppShell/AppShell";
+import { DisambiguationModal } from "@/components/DisambiguationModal/DisambiguationModal";
 import { PosterGrid } from "@/components/PosterGrid/PosterGrid";
 import { Leaderboard } from "@/components/Leaderboard/Leaderboard";
 import { Settings } from "@/components/Settings/Settings";
-import { SpotlightPalette } from "@/components/SpotlightPalette/SpotlightPalette";
+import { SpotlightPalette, type AmbiguousMentionWire } from "@/components/SpotlightPalette/SpotlightPalette";
 import { Button } from "@/components/ui/button";
 
 /** The NestJS backend this frontend calls cross-origin (ADR 0004). */
@@ -44,6 +45,18 @@ export function Home() {
   // no reference to the palette instance driving it.
   const [pendingParseCount, setPendingParseCount] = useState(0);
   const [glowShowIds, setGlowShowIds] = useState<string[]>([]);
+  // The Disambiguation Step's (#13) queue for the current parse batch, plus
+  // a counter bumped alongside it so DisambiguationModal remounts (a fresh
+  // `key`) with a clean internal cursor per batch rather than reconciling
+  // its current-mention index against a replaced array.
+  const [ambiguousQueue, setAmbiguousQueue] = useState<AmbiguousMentionWire[]>([]);
+  const [ambiguousBatchId, setAmbiguousBatchId] = useState(0);
+  // AC: "shown only after resolved shows are already visible on the wall."
+  // Set whenever a parse resolved at least one show (there's now a wall
+  // update worth waiting for), cleared by PosterGrid's `onShowsLoaded` —
+  // fired on every settled `GET /shows` attempt, success or failure, so this
+  // never gets stuck true if that refetch happens to error out.
+  const [awaitingWallUpdate, setAwaitingWallUpdate] = useState(false);
   const { getToken } = useAuth();
   const router = useRouter();
 
@@ -51,9 +64,15 @@ export function Home() {
     setPendingParseCount(0);
     if (resolvedShowIds.length === 0) return;
 
+    setAwaitingWallUpdate(true);
     setShowsRefreshKey((key) => key + 1);
     setGlowShowIds(resolvedShowIds);
     window.setTimeout(() => setGlowShowIds([]), GLOW_DURATION_MS);
+  }
+
+  function handleAmbiguous(mentions: AmbiguousMentionWire[]) {
+    setAmbiguousQueue(mentions);
+    setAmbiguousBatchId((id) => id + 1);
   }
 
   useEffect(() => {
@@ -89,6 +108,7 @@ export function Home() {
           onFriendAccepted: () => setFriendsRefreshKey((key) => key + 1),
           pendingParseCount,
           glowShowIds,
+          onShowsLoaded: () => setAwaitingWallUpdate(false),
         })}
       </AppShell>
       {/* The Spotlight palette's FAB (#8, docs/design.md): full-round,
@@ -107,7 +127,20 @@ export function Home() {
         onShowAdded={() => setShowsRefreshKey((key) => key + 1)}
         onParseStart={setPendingParseCount}
         onParseSettled={handleParseSettled}
+        onAmbiguous={handleAmbiguous}
       />
+      {/* Mounted only once there's something to show, and only once the
+          same parse's resolved shows have already landed (AC) — a fresh
+          `key` per batch gives DisambiguationModal a clean cursor rather
+          than reconciling against a replaced `mentions` array. */}
+      {ambiguousQueue.length > 0 && !awaitingWallUpdate && (
+        <DisambiguationModal
+          key={ambiguousBatchId}
+          mentions={ambiguousQueue}
+          onDone={() => setAmbiguousQueue([])}
+          onShowAdded={() => setShowsRefreshKey((key) => key + 1)}
+        />
+      )}
     </>
   );
 }
@@ -124,6 +157,7 @@ function renderScreen(
     onFriendAccepted,
     pendingParseCount,
     glowShowIds,
+    onShowsLoaded,
   }: {
     onAddFriend: () => void;
     onOpenPalette: () => void;
@@ -132,6 +166,7 @@ function renderScreen(
     onFriendAccepted: () => void;
     pendingParseCount: number;
     glowShowIds: string[];
+    onShowsLoaded: () => void;
   },
 ) {
   switch (active) {
@@ -142,6 +177,7 @@ function renderScreen(
           refreshKey={showsRefreshKey}
           pendingSkeletonCount={pendingParseCount}
           glowShowIds={glowShowIds}
+          onShowsLoaded={onShowsLoaded}
         />
       );
     case "leaderboard":

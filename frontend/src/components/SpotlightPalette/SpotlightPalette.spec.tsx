@@ -370,15 +370,17 @@ describe("SpotlightPalette — NLP mode + parse choreography (#12)", () => {
     await waitFor(() => expect(input).toHaveValue(""));
   });
 
-  it("keeps ambiguous mentions out of the UI — no invented modal — without losing resolved/unmatched handling in the same response", async () => {
+  it("hands ambiguous mentions to onAmbiguous (never with an empty list) without losing resolved/unmatched handling in the same response", async () => {
+    const ambiguousMention = { title: "the office", seasons: [1, 2], candidates: [] };
     mockParse({
       resolved: [{ id: "s1", title: "Friends", poster_path: null, watch_state: "full" }],
-      ambiguous: [{ title: "the office", seasons: [1, 2], candidates: [] }],
+      ambiguous: [ambiguousMention],
       unmatched: [{ title: "xzyabc", reason: "no_tmdb_match" }],
     });
     const onParseSettled = vi.fn();
+    const onAmbiguous = vi.fn();
     const user = userEvent.setup();
-    renderApp(<SpotlightPalette open onClose={vi.fn()} onParseSettled={onParseSettled} />);
+    renderApp(<SpotlightPalette open onClose={vi.fn()} onParseSettled={onParseSettled} onAmbiguous={onAmbiguous} />);
 
     await user.type(
       screen.getByRole("textbox", { name: /search for a show/i }),
@@ -387,9 +389,19 @@ describe("SpotlightPalette — NLP mode + parse choreography (#12)", () => {
 
     await waitFor(() => expect(onParseSettled).toHaveBeenCalledWith(["s1"]));
     await screen.findByRole("alert");
-    // Exactly one dialog — the palette itself. No Disambiguation Step modal
-    // (#13) invented for the ambiguous "the office" mention.
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(onAmbiguous).toHaveBeenCalledWith([ambiguousMention]);
+  });
+
+  it("never calls onAmbiguous when a parse has no ambiguous mentions", async () => {
+    mockParse({ resolved: [{ id: "s1", title: "Breaking Bad", poster_path: null, watch_state: "full" }], ambiguous: [], unmatched: [] });
+    const onAmbiguous = vi.fn();
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} onAmbiguous={onAmbiguous} />);
+
+    await user.type(screen.getByRole("textbox", { name: /search for a show/i }), "breaking bad 3 seasons{Enter}");
+
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /search for a show/i })).toHaveValue(""));
+    expect(onAmbiguous).not.toHaveBeenCalled();
   });
 
   it("shows an inline error and reports zero resolved ids when the parse request itself fails", async () => {

@@ -79,14 +79,8 @@ interface UnmatchedMentionWire {
   reason: "no_tmdb_match" | "progress_not_understood";
 }
 
-/**
- * The wire shape of one `POST /shows/parse` ambiguous mention. Kept around
- * only so this component doesn't lose the data — the Disambiguation Step
- * that consumes it is #13, blocked by this ticket and not yet built, so
- * nothing here renders it. Mirrors `renderScreen`'s `case "settings"` in
- * Home.tsx: no invented placeholder UI for a screen/step that isn't built.
- */
-interface AmbiguousMentionWire {
+/** The wire shape of one `POST /shows/parse` ambiguous mention — handed to `onAmbiguous` for the Disambiguation Step (#13) to consume; this component never renders it itself. */
+export interface AmbiguousMentionWire {
   title: string;
   seasons: number[] | null;
   candidates: ShowSearchResultWire[];
@@ -147,6 +141,8 @@ interface SpotlightPaletteProps {
    * those newly-landed tiles.
    */
   onParseSettled?: (resolvedShowIds: string[]) => void;
+  /** Fired with a parse's `ambiguous` mentions (#13's Disambiguation Step queue) whenever the list is non-empty — never with an empty array, so Home doesn't have to filter a no-op call. */
+  onAmbiguous?: (mentions: AmbiguousMentionWire[]) => void;
 }
 
 /**
@@ -171,7 +167,7 @@ interface SpotlightPaletteProps {
  * opened won't show as already-added until it's added again here — a real,
  * accepted gap for this ticket, not solved by adding a backend endpoint.
  */
-export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onParseSettled }: SpotlightPaletteProps) {
+export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onParseSettled, onAmbiguous }: SpotlightPaletteProps) {
   const { getToken } = useAuth();
   const [query, setQuery] = useState("");
   const [searchState, setSearchState] = useState<SearchState>({ status: "idle" });
@@ -180,11 +176,6 @@ export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onP
   const [addingId, setAddingId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [parseState, setParseState] = useState<ParseState>({ status: "idle" });
-  // The setter is all this component needs — ambiguous mentions are kept
-  // only so a parse response with resolved/unmatched *and* ambiguous
-  // mentions doesn't lose the ambiguous ones; #13 (the Disambiguation Step)
-  // is the ticket that will actually read them back out.
-  const [, setAmbiguousMentions] = useState<AmbiguousMentionWire[]>([]);
   const requestIdRef = useRef(0);
 
   // `trimmedQuery === ""` alone already hides suggestions/loading/error at
@@ -258,7 +249,7 @@ export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onP
       if (!response.ok) throw new Error(`POST /shows/parse failed: ${response.status}`);
 
       const body = (await response.json()) as ParseResponseWire;
-      setAmbiguousMentions(body.ambiguous);
+      if (body.ambiguous.length > 0) onAmbiguous?.(body.ambiguous);
       setParseState({ status: "done", unmatched: body.unmatched });
       onParseSettled?.(body.resolved.map((show) => show.id));
       // Nothing left to fix — clear the box for the next command. When
@@ -339,7 +330,6 @@ export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onP
     setHighlightedIndex(0);
     setErrorMessage(null);
     setParseState({ status: "idle" });
-    setAmbiguousMentions([]);
     onClose();
   }
 
