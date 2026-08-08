@@ -7,6 +7,7 @@ import { Plus } from "lucide-react";
 import { AppShell, type NavKey } from "@/components/AppShell/AppShell";
 import { PosterGrid } from "@/components/PosterGrid/PosterGrid";
 import { Leaderboard } from "@/components/Leaderboard/Leaderboard";
+import { Settings } from "@/components/Settings/Settings";
 import { SpotlightPalette } from "@/components/SpotlightPalette/SpotlightPalette";
 import { Button } from "@/components/ui/button";
 
@@ -29,6 +30,9 @@ export function Home() {
   // owns its own `GET /shows` fetch — refetches rather than going stale
   // (#8: "the poster grid should end up showing it").
   const [showsRefreshKey, setShowsRefreshKey] = useState(0);
+  // Same pattern, bumped after Settings accepts a Friend Request so
+  // Leaderboard refetches immediately (#16, per #15).
+  const [friendsRefreshKey, setFriendsRefreshKey] = useState(0);
   const { getToken } = useAuth();
   const router = useRouter();
 
@@ -57,7 +61,13 @@ export function Home() {
   return (
     <>
       <AppShell active={active} onNavigate={setActive}>
-        {renderScreen(active, () => setActive("settings"), () => setPaletteOpen(true), showsRefreshKey)}
+        {renderScreen(active, {
+          onAddFriend: () => setActive("settings"),
+          onOpenPalette: () => setPaletteOpen(true),
+          showsRefreshKey,
+          friendsRefreshKey,
+          onFriendAccepted: () => setFriendsRefreshKey((key) => key + 1),
+        })}
       </AppShell>
       {/* The Spotlight palette's FAB (#8, docs/design.md): full-round,
           accent-colored, bottom-right, persistent across tabs — rendered
@@ -78,22 +88,30 @@ export function Home() {
   );
 }
 
-// Settings has no screen yet — a later ticket's job — so its tab renders
-// nothing rather than inventing placeholder copy this ticket wasn't asked
-// for. "Add a friend" routes there since that's where docs/design.md puts
+// "Add a friend" routes to Settings since that's where docs/design.md puts
 // the real affordance ("Settings = ... Add a friend, Pending requests.").
 function renderScreen(
   active: NavKey,
-  onAddFriend: () => void,
-  onOpenPalette: () => void,
-  showsRefreshKey: number,
+  {
+    onAddFriend,
+    onOpenPalette,
+    showsRefreshKey,
+    friendsRefreshKey,
+    onFriendAccepted,
+  }: {
+    onAddFriend: () => void;
+    onOpenPalette: () => void;
+    showsRefreshKey: number;
+    friendsRefreshKey: number;
+    onFriendAccepted: () => void;
+  },
 ) {
   switch (active) {
     case "home":
       return <PosterGrid onOpenPalette={onOpenPalette} refreshKey={showsRefreshKey} />;
     case "leaderboard":
-      return <Leaderboard onAddFriend={onAddFriend} />;
+      return <Leaderboard onAddFriend={onAddFriend} refreshKey={friendsRefreshKey} />;
     case "settings":
-      return null;
+      return <Settings onFriendAccepted={onFriendAccepted} />;
   }
 }

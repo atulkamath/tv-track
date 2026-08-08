@@ -21,6 +21,8 @@ export interface LeaderboardEntry {
 interface LeaderboardProps {
   /** Wired to the Settings "Add a friend" flow once that ticket lands. */
   onAddFriend?: () => void;
+  /** Bumped by Home after a Friend Request is accepted in Settings (#16) so this refetches immediately — same lifted-refresh-key pattern as PosterGrid's `refreshKey`. */
+  refreshKey?: number;
 }
 
 type LoadState =
@@ -60,7 +62,7 @@ function toLeaderboardEntry(entry: LeaderboardEntryResponse): LeaderboardEntry {
  * frontend tests fake the network via MSW (see Leaderboard.spec.tsx) rather
  * than a live backend.
  */
-export function Leaderboard({ onAddFriend }: LeaderboardProps) {
+export function Leaderboard({ onAddFriend, refreshKey }: LeaderboardProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const { getToken } = useAuth();
 
@@ -88,7 +90,9 @@ export function Leaderboard({ onAddFriend }: LeaderboardProps) {
     return () => {
       cancelled = true;
     };
-  }, [getToken]);
+    // `refreshKey` isn't read above — it's a deliberate re-fetch trigger the
+    // caller bumps after a mutation, same as PosterGrid.tsx's `refreshKey`.
+  }, [getToken, refreshKey]);
 
   if (state.status === "loading") {
     return (
