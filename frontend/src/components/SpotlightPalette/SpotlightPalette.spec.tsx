@@ -160,18 +160,29 @@ describe("SpotlightPalette", () => {
     await waitFor(() => expect(receivedBody).toEqual({ tmdb_id: OFFICE_UK.tmdb_id }));
   });
 
-  it("shows the 3 example rows when empty, hiding them while typing", async () => {
+  it("shows the 3 example rows (each with a plain-language caption) when empty, hiding them while typing", async () => {
     mockSearch([BREAKING_BAD]);
     const user = userEvent.setup();
     renderApp(<SpotlightPalette open onClose={vi.fn()} />);
 
     expect(screen.getByText(/try one of these/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Breaking Bad" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "The Office" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "The Wire" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^simpsons/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^breaking bad 3 seasons/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^friends, the office 2 seasons/i })).toBeInTheDocument();
+    expect(screen.getByText(/marks seasons 1–3 watched/i)).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: /search for a show/i }), "b");
     expect(screen.queryByText(/try one of these/i)).not.toBeInTheDocument();
+  });
+
+  it("clicking a helper example fills the input with its literal text", async () => {
+    mockSearch([]);
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /^breaking bad 3 seasons/i }));
+
+    expect(screen.getByRole("textbox", { name: /search for a show/i })).toHaveValue("breaking bad 3 seasons");
   });
 
   it("marks a show already added this session as added in its suggestion row", async () => {
@@ -214,5 +225,182 @@ describe("SpotlightPalette", () => {
     await user.click(screen.getByRole("button", { name: "Add" }));
 
     await screen.findByRole("alert");
+  });
+});
+
+/** `POST /shows/parse`'s response shape (parse-shows.dto.ts) — see #12/#11. */
+interface ParseResponse {
+  resolved: { id: string; title: string; poster_path: string | null; watch_state: "full" | "partial" | "none" }[];
+  ambiguous: { title: string; seasons: number[] | null; candidates: SearchResultResponse[] }[];
+  unmatched: { title: string; reason: "no_tmdb_match" | "progress_not_understood" }[];
+}
+
+function mockParse(response: ParseResponse) {
+  server.use(http.post(`${API_URL}/shows/parse`, () => HttpResponse.json(response)));
+}
+
+describe("SpotlightPalette — NLP mode + parse choreography (#12)", () => {
+  it('flips the CTA to "Add N shows" for multi-title or seasons-bearing input, leaving a plain title in typeahead mode', async () => {
+    mockSearch([]);
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: /search for a show/i });
+
+    await user.type(input, "simpsons");
+    expect(screen.queryByRole("button", { name: /^add \d/i })).not.toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, "breaking bad 3 seasons");
+    expect(await screen.findByRole("button", { name: "Add 1 show" })).toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, "friends, the office 2 seasons");
+    expect(await screen.findByRole("button", { name: "Add 2 shows" })).toBeInTheDocument();
+  });
+
+  it("skips GET /shows/search in NLP mode — suggestions yield to the CTA", async () => {
+    let searchCalled = false;
+    server.use(
+      http.get(`${API_URL}/shows/search`, () => {
+        searchCalled = true;
+        return HttpResponse.json([]);
+      }),
+    );
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} />);
+
+    await user.type(screen.getByRole("textbox", { name: /search for a show/i }), "breaking bad 3 seasons");
+    await screen.findByRole("button", { name: "Add 1 show" });
+
+    expect(searchCalled).toBe(false);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("Enter triggers POST /shows/parse with { text }, showing a dots-pill while it's in flight and reporting the pending count", async () => {
+    let receivedBody: unknown;
+    let resolveParse!: (response: Response) => void;
+    server.use(
+      http.post(`${API_URL}/shows/parse`, async ({ request }) => {
+        receivedBody = await request.json();
+        return new Promise<Response>((resolve) => {
+          resolveParse = resolve;
+        });
+      }),
+    );
+    const onParseStart = vi.fn();
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} onParseStart={onParseStart} />);
+
+    await user.type(screen.getByRole("textbox", { name: /search for a show/i }), "breaking bad 3 seasons{Enter}");
+
+    expect(onParseStart).toHaveBeenCalledWith(1);
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add 1 show" })).not.toBeInTheDocument();
+    await waitFor(() => expect(receivedBody).toEqual({ text: "breaking bad 3 seasons" }));
+
+    resolveParse(HttpResponse.json({ resolved: [], ambiguous: [], unmatched: [] }));
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("the dots-pill's dots opt out of motion via motion-reduce:animate-none (a CSS variant, not a JS check)", async () => {
+    let resolveParse!: (response: Response) => void;
+    server.use(
+      http.post(
+        `${API_URL}/shows/parse`,
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveParse = resolve;
+          }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} />);
+
+    await user.type(screen.getByRole("textbox", { name: /search for a show/i }), "breaking bad 3 seasons{Enter}");
+
+    const pill = await screen.findByRole("status");
+    const dots = pill.querySelectorAll("[aria-hidden='true']");
+    expect(dots).toHaveLength(3);
+    dots.forEach((dot) => expect(dot).toHaveClass("motion-reduce:animate-none"));
+
+    resolveParse(HttpResponse.json({ resolved: [], ambiguous: [], unmatched: [] }));
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("shows the inline unmatched strip with design.md's exact copy, preserving the typed text in the input", async () => {
+    mockParse({ resolved: [], ambiguous: [], unmatched: [{ title: "xzyabc", reason: "no_tmdb_match" }] });
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: /search for a show/i });
+
+    await user.type(input, "xzyabc 2 seasons{Enter}");
+
+    const strip = await screen.findByRole("alert");
+    expect(strip).toHaveTextContent(`Couldn't match that. Check the spelling, or try "show name 3 seasons".`);
+    expect(input).toHaveValue("xzyabc 2 seasons");
+  });
+
+  it("clears a stale unmatched strip once the query is edited", async () => {
+    mockParse({ resolved: [], ambiguous: [], unmatched: [{ title: "xzyabc", reason: "no_tmdb_match" }] });
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: /search for a show/i });
+
+    await user.type(input, "xzyabc 2 seasons{Enter}");
+    await screen.findByRole("alert");
+
+    await user.type(input, "!");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("clears the query and calls onParseSettled with resolved ids once everything resolves cleanly", async () => {
+    mockParse({
+      resolved: [{ id: "s1", title: "Breaking Bad", poster_path: null, watch_state: "full" }],
+      ambiguous: [],
+      unmatched: [],
+    });
+    const onParseSettled = vi.fn();
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} onParseSettled={onParseSettled} />);
+    const input = screen.getByRole("textbox", { name: /search for a show/i });
+
+    await user.type(input, "breaking bad 3 seasons{Enter}");
+
+    await waitFor(() => expect(onParseSettled).toHaveBeenCalledWith(["s1"]));
+    await waitFor(() => expect(input).toHaveValue(""));
+  });
+
+  it("keeps ambiguous mentions out of the UI — no invented modal — without losing resolved/unmatched handling in the same response", async () => {
+    mockParse({
+      resolved: [{ id: "s1", title: "Friends", poster_path: null, watch_state: "full" }],
+      ambiguous: [{ title: "the office", seasons: [1, 2], candidates: [] }],
+      unmatched: [{ title: "xzyabc", reason: "no_tmdb_match" }],
+    });
+    const onParseSettled = vi.fn();
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} onParseSettled={onParseSettled} />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: /search for a show/i }),
+      "friends, the office, xzyabc{Enter}",
+    );
+
+    await waitFor(() => expect(onParseSettled).toHaveBeenCalledWith(["s1"]));
+    await screen.findByRole("alert");
+    // Exactly one dialog — the palette itself. No Disambiguation Step modal
+    // (#13) invented for the ambiguous "the office" mention.
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("shows an inline error and reports zero resolved ids when the parse request itself fails", async () => {
+    server.use(http.post(`${API_URL}/shows/parse`, () => HttpResponse.error()));
+    const onParseSettled = vi.fn();
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} onParseSettled={onParseSettled} />);
+
+    await user.type(screen.getByRole("textbox", { name: /search for a show/i }), "breaking bad 3 seasons{Enter}");
+
+    await screen.findByRole("alert");
+    expect(onParseSettled).toHaveBeenCalledWith([]);
   });
 });

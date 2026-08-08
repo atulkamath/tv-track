@@ -93,9 +93,25 @@ interface PosterGridProps {
   onOpenPalette?: () => void;
   /** Bumped by the caller (Home) after a Spotlight-palette add so this component refetches `GET /shows` and the grid doesn't go stale. */
   refreshKey?: number;
+  /**
+   * How many shimmer skeleton cards to render while a Spotlight-palette
+   * parse (#12, `POST /shows/parse`) is in flight — lifted up through
+   * Home.tsx from SpotlightPalette's `onParseStart`, the same way
+   * `refreshKey` is, so the placeholders land on the wall itself, in the
+   * positions the resolved shows are about to occupy (docs/design.md:
+   * "skeleton cards where shows will land"), not just inside the palette.
+   */
+  pendingSkeletonCount?: number;
+  /**
+   * Show ids that just landed via a parse and should pop with a brief
+   * accent glow (docs/design.md, 1.4s) before settling — lifted from
+   * SpotlightPalette's `onParseSettled` via Home.tsx, so only the
+   * newly-resolved tiles glow rather than the whole grid re-rendering.
+   */
+  glowShowIds?: string[];
 }
 
-export function PosterGrid({ onOpenPalette, refreshKey }: PosterGridProps = {}) {
+export function PosterGrid({ onOpenPalette, refreshKey, pendingSkeletonCount = 0, glowShowIds = [] }: PosterGridProps = {}) {
   const { getToken } = useAuth();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [percentByShowId, setPercentByShowId] = useState<Record<string, number>>({});
@@ -211,7 +227,7 @@ export function PosterGrid({ onOpenPalette, refreshKey }: PosterGridProps = {}) 
         Couldn&apos;t load your shows. Try refreshing.
       </p>
     );
-  } else if (state.shows.length === 0) {
+  } else if (state.shows.length === 0 && pendingSkeletonCount === 0) {
     content = <EmptyState onAddExample={handleAddExample} onOpenPalette={onOpenPalette} />;
   } else {
     content = (
@@ -220,7 +236,19 @@ export function PosterGrid({ onOpenPalette, refreshKey }: PosterGridProps = {}) 
         aria-label="Shows"
       >
         {state.shows.map((show) => (
-          <PosterTile key={show.id} show={show} percent={percentByShowId[show.id]} onSelect={() => setSelectedShowId(show.id)} />
+          <PosterTile
+            key={show.id}
+            show={show}
+            percent={percentByShowId[show.id]}
+            onSelect={() => setSelectedShowId(show.id)}
+            glowing={glowShowIds.includes(show.id)}
+          />
+        ))}
+        {/* A parse in flight (#12) — placeholders in the exact positions the
+            resolved shows are about to occupy, per docs/design.md, rather
+            than a separate loading area. */}
+        {Array.from({ length: pendingSkeletonCount }, (_, index) => (
+          <SkeletonPosterTile key={`parse-skeleton-${index}`} index={index} />
         ))}
       </ul>
     );
@@ -270,7 +298,17 @@ function EmptyState({
   );
 }
 
-function PosterTile({ show, percent, onSelect }: { show: Show; percent?: number; onSelect: () => void }) {
+function PosterTile({
+  show,
+  percent,
+  onSelect,
+  glowing,
+}: {
+  show: Show;
+  percent?: number;
+  onSelect: () => void;
+  glowing?: boolean;
+}) {
   const isFull = show.watchState === "full";
   const isPartial = show.watchState === "partial";
   const isNone = show.watchState === "none";
@@ -283,6 +321,9 @@ function PosterTile({ show, percent, onSelect }: { show: Show; percent?: number;
       className={cn(
         "relative aspect-[2/3] overflow-hidden rounded-sm shadow-card [transition:transform_180ms_ease] hover:scale-[1.045] motion-reduce:[transition:none]",
         isNone && "brightness-[.6] saturate-[.8] hover:brightness-100 hover:saturate-100",
+        // Newly-landed-via-parse pop (#12, docs/design.md, 1.4s) — see
+        // globals.css's `--animate-glow-pop`.
+        glowing && "animate-glow-pop motion-reduce:animate-none",
       )}
     >
       {/* The li carries the tile's identity/styling (data-testid, dimmed
@@ -312,6 +353,25 @@ function PosterTile({ show, percent, onSelect }: { show: Show; percent?: number;
         )}
       </button>
     </li>
+  );
+}
+
+/**
+ * A parse-in-flight placeholder (#12, docs/design.md: "shimmer skeleton
+ * cards where shows will land"). `aria-hidden` — it's decorative; the
+ * palette's dots-pill (SpotlightPalette.tsx) is the accessible loading
+ * signal (`role="status"`). Staggered delays so the row shimmers rather than
+ * pulsing in lockstep; `motion-reduce:animate-none` matches every other
+ * animation in this app (PosterTile's hover transition, the dots-pill).
+ */
+function SkeletonPosterTile({ index }: { index: number }) {
+  return (
+    <li
+      data-testid="poster-skeleton"
+      aria-hidden="true"
+      className="aspect-[2/3] animate-shimmer rounded-sm bg-[var(--surface-2)] motion-reduce:animate-none"
+      style={{ animationDelay: `${index * 90}ms` }}
+    />
   );
 }
 

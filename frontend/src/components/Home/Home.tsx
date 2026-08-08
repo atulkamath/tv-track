@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 /** The NestJS backend this frontend calls cross-origin (ADR 0004). */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+/** Slightly longer than the 1.4s CSS animation (globals.css's `--animate-glow-pop`) so the glow class isn't cleared mid-animation. */
+const GLOW_DURATION_MS = 1500;
+
 /**
  * What a signed-in visitor lands on. Rendered only once Clerk confirms a
  * session exists (see `app/page.tsx`'s `<Show when="signed-in">`), so this
@@ -29,8 +32,25 @@ export function Home() {
   // owns its own `GET /shows` fetch — refetches rather than going stale
   // (#8: "the poster grid should end up showing it").
   const [showsRefreshKey, setShowsRefreshKey] = useState(0);
+  // The parse choreography's (#12) pending/landed state, lifted up from
+  // SpotlightPalette the same way `showsRefreshKey` is — the skeleton cards
+  // and glow-pop render on PosterGrid's wall itself (docs/design.md:
+  // "skeleton cards where shows will land"), not inside the palette modal,
+  // so PosterGrid needs to know about a parse in flight even though it has
+  // no reference to the palette instance driving it.
+  const [pendingParseCount, setPendingParseCount] = useState(0);
+  const [glowShowIds, setGlowShowIds] = useState<string[]>([]);
   const { getToken } = useAuth();
   const router = useRouter();
+
+  function handleParseSettled(resolvedShowIds: string[]) {
+    setPendingParseCount(0);
+    if (resolvedShowIds.length === 0) return;
+
+    setShowsRefreshKey((key) => key + 1);
+    setGlowShowIds(resolvedShowIds);
+    window.setTimeout(() => setGlowShowIds([]), GLOW_DURATION_MS);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +77,14 @@ export function Home() {
   return (
     <>
       <AppShell active={active} onNavigate={setActive}>
-        {renderScreen(active, () => setActive("settings"), () => setPaletteOpen(true), showsRefreshKey)}
+        {renderScreen(
+          active,
+          () => setActive("settings"),
+          () => setPaletteOpen(true),
+          showsRefreshKey,
+          pendingParseCount,
+          glowShowIds,
+        )}
       </AppShell>
       {/* The Spotlight palette's FAB (#8, docs/design.md): full-round,
           accent-colored, bottom-right, persistent across tabs — rendered
@@ -73,6 +100,8 @@ export function Home() {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onShowAdded={() => setShowsRefreshKey((key) => key + 1)}
+        onParseStart={setPendingParseCount}
+        onParseSettled={handleParseSettled}
       />
     </>
   );
@@ -87,10 +116,19 @@ function renderScreen(
   onAddFriend: () => void,
   onOpenPalette: () => void,
   showsRefreshKey: number,
+  pendingParseCount: number,
+  glowShowIds: string[],
 ) {
   switch (active) {
     case "home":
-      return <PosterGrid onOpenPalette={onOpenPalette} refreshKey={showsRefreshKey} />;
+      return (
+        <PosterGrid
+          onOpenPalette={onOpenPalette}
+          refreshKey={showsRefreshKey}
+          pendingSkeletonCount={pendingParseCount}
+          glowShowIds={glowShowIds}
+        />
+      );
     case "leaderboard":
       return <Leaderboard onAddFriend={onAddFriend} />;
     case "settings":

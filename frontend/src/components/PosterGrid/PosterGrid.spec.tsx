@@ -216,6 +216,52 @@ describe("PosterGrid", () => {
     expect(dialog).toHaveTextContent("1 of 2 watched");
   });
 
+  it("renders shimmer skeleton placeholders where shows will land while a parse (#12) is pending, on top of the empty-state and alongside real tiles", async () => {
+    mockShows([]);
+    const { rerender } = renderApp(<PosterGrid refreshKey={0} pendingSkeletonCount={2} />);
+
+    const skeletons = await screen.findAllByTestId("poster-skeleton");
+    expect(skeletons).toHaveLength(2);
+    expect(screen.queryByText(/nothing here yet/i)).not.toBeInTheDocument();
+    skeletons.forEach((skeleton) => {
+      expect(skeleton).toHaveClass("animate-shimmer");
+      expect(skeleton).toHaveClass("motion-reduce:animate-none");
+    });
+
+    // A resolved parse bumps refreshKey (Home.tsx's onParseSettled) the same
+    // moment it drops pendingSkeletonCount — mirrored here rather than only
+    // changing one prop, matching how a real parse settles.
+    mockShows([FULL_SHOW]);
+    rerender(<PosterGrid refreshKey={1} pendingSkeletonCount={1} />);
+
+    await screen.findByTestId("poster-tile");
+    expect(screen.getAllByTestId("poster-skeleton")).toHaveLength(1);
+  });
+
+  it("goes back to the empty state once a pending parse clears with nothing resolved", async () => {
+    mockShows([]);
+    const { rerender } = renderApp(<PosterGrid pendingSkeletonCount={1} />);
+    await screen.findByTestId("poster-skeleton");
+
+    rerender(<PosterGrid pendingSkeletonCount={0} />);
+
+    await screen.findByText(/nothing here yet/i);
+    expect(screen.queryByTestId("poster-skeleton")).not.toBeInTheDocument();
+  });
+
+  it("glow-pops only the show ids passed in glowShowIds, not the rest of the grid", async () => {
+    const OTHER_SHOW = { id: "s9", title: "Other Show", poster_path: null, watch_state: "full" };
+    mockShows([FULL_SHOW, OTHER_SHOW]);
+    renderApp(<PosterGrid glowShowIds={[FULL_SHOW.id]} />);
+
+    await screen.findAllByTestId("poster-tile");
+    const bbTile = screen.getByRole("button", { name: `Open ${FULL_SHOW.title}` }).closest("li");
+    const otherTile = screen.getByRole("button", { name: `Open ${OTHER_SHOW.title}` }).closest("li");
+
+    expect(bbTile).toHaveClass("animate-glow-pop");
+    expect(otherTile).not.toHaveClass("animate-glow-pop");
+  });
+
   it("refetches GET /shows after a modal-driven delete, so the tile disappears without a page reload", async () => {
     mockShows([FULL_SHOW]);
     server.use(

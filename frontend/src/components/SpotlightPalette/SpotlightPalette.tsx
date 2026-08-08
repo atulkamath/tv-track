@@ -15,12 +15,46 @@ const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 const SEARCH_DEBOUNCE_MS = 300;
 
 /**
- * Mirrors PosterGrid's `EMPTY_STATE_EXAMPLES` — real, safe, well-known TMDB
- * titles for the "Try one of these" helper (docs/design.md). Since NL
- * parsing is out of scope for #8, these are plain titles to search for, not
- * literal commands.
+ * The three canonical examples from docs/design.md's "Try one of these"
+ * helper — one plain single-title search (unaffected by #12) and two NLP
+ * commands, each with a short caption explaining what typing it does. These
+ * are literal commands now, not just search seeds: clicking one fills the
+ * input with `text` verbatim, and typing/pasting them verbatim is exactly
+ * what `isNlpMode`/`estimateMentionCount` below are verified against.
  */
-const HELPER_EXAMPLES = ["Breaking Bad", "The Office", "The Wire"];
+const HELPER_EXAMPLES: { text: string; caption: string }[] = [
+  { text: "simpsons", caption: "Searches as you type, add one show" },
+  { text: "breaking bad 3 seasons", caption: "Adds the show, marks seasons 1–3 watched" },
+  { text: "friends, the office 2 seasons", caption: "Adds two shows in one line" },
+];
+
+/**
+ * The NLP-mode heuristic (#12 AC: "Multi-title or seasons-bearing input
+ * flips the CTA to 'Add N shows'"). Client-side and deliberately simple —
+ * the server (`POST /shows/parse`) does the real resolution, so this only
+ * has to route docs/design.md's three canonical examples correctly:
+ * "simpsons" (plain, stays in typeahead mode), "breaking bad 3 seasons" and
+ * "friends, the office 2 seasons" (both NLP mode).
+ */
+const NLP_MODE_PATTERN = /,| and |\bseasons?\b|\bepisodes?\b/i;
+
+function isNlpMode(text: string): boolean {
+  return NLP_MODE_PATTERN.test(text);
+}
+
+/**
+ * A client-side estimate of how many shows a parse will resolve, for the
+ * "Add N shows" CTA label only — it doesn't need to be authoritative (the
+ * real mention count comes back from `POST /shows/parse`), just right for
+ * docs/design.md's canonical examples: "breaking bad 3 seasons" → 1,
+ * "friends, the office 2 seasons" → 2.
+ */
+function estimateMentionCount(text: string): number {
+  return text
+    .split(/,| and /i)
+    .map((part) => part.trim())
+    .filter(Boolean).length;
+}
 
 /** The wire shape of one `GET /shows/search` candidate. Snake-case, matching the backend (search-shows.dto.ts). */
 interface ShowSearchResultWire {
@@ -37,6 +71,32 @@ interface ShowCardWire {
   title: string;
   poster_path: string | null;
   watch_state: "full" | "partial" | "none";
+}
+
+/** The wire shape of one `POST /shows/parse` unmatched mention (parse-shows.dto.ts). */
+interface UnmatchedMentionWire {
+  title: string;
+  reason: "no_tmdb_match" | "progress_not_understood";
+}
+
+/**
+ * The wire shape of one `POST /shows/parse` ambiguous mention. Kept around
+ * only so this component doesn't lose the data — the Disambiguation Step
+ * that consumes it is #13, blocked by this ticket and not yet built, so
+ * nothing here renders it. Mirrors `renderScreen`'s `case "settings"` in
+ * Home.tsx: no invented placeholder UI for a screen/step that isn't built.
+ */
+interface AmbiguousMentionWire {
+  title: string;
+  seasons: number[] | null;
+  candidates: ShowSearchResultWire[];
+}
+
+/** The wire shape of `POST /shows/parse`'s response (parse-shows.dto.ts). */
+interface ParseResponseWire {
+  resolved: ShowCardWire[];
+  ambiguous: AmbiguousMentionWire[];
+  unmatched: UnmatchedMentionWire[];
 }
 
 interface SearchResult {
@@ -61,21 +121,45 @@ type SearchState =
   | { status: "error" }
   | { status: "ready"; results: SearchResult[] };
 
+type ParseState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "done"; unmatched: UnmatchedMentionWire[] };
+
 interface SpotlightPaletteProps {
   open: boolean;
   onClose: () => void;
-  /** Called after each successful add so the caller (Home) can reconcile its `GET /shows` list — see Home.tsx's `showsRefreshKey`. */
+  /** Called after each successful single-title add so the caller (Home) can reconcile its `GET /shows` list — see Home.tsx's `showsRefreshKey`. */
   onShowAdded?: () => void;
+  /**
+   * Fired the moment a parse (#12, `POST /shows/parse`) starts, with the
+   * client-side estimated mention count — lets Home render that many
+   * shimmer skeleton cards on the poster wall itself, in the positions the
+   * resolved shows are about to occupy (docs/design.md: "skeleton cards
+   * where shows will land"), not just inside this modal.
+   */
+  onParseStart?: (pendingCount: number) => void;
+  /**
+   * Fired once a parse settles — success or failure — with the ids of any
+   * `resolved` shows (empty on failure or when nothing resolved). Home uses
+   * this to clear the skeleton count and, when non-empty, bump the same
+   * `showsRefreshKey` refetch `onShowAdded` triggers and glow-pop exactly
+   * those newly-landed tiles.
+   */
+  onParseSettled?: (resolvedShowIds: string[]) => void;
 }
 
 /**
- * Spotlight palette (#8): a centered typeahead over `GET /shows/search`,
- * adding one candidate at a time via `POST /shows` (all episodes watched —
- * `seasons` omitted). docs/design.md also describes a fancier
- * natural-language "parse choreography" (multi-mention commands like
- * "breaking bad 3 seasons", shimmer skeletons, an LLM parse step) — that is
- * a different, not-yet-built ticket; this component only ever searches one
- * plain title at a time and adds one candidate at a time.
+ * Spotlight palette: a centered box over two backend calls depending on what
+ * looks typed. Plain single-title text (#8) stays a live `GET /shows/search`
+ * typeahead, adding one candidate at a time via `POST /shows` (all episodes
+ * watched — `seasons` omitted). Multi-title or seasons/episodes-bearing text
+ * (#12, `isNlpMode` above) instead runs `POST /shows/parse` on Enter/CTA
+ * click — the typeahead search is skipped entirely so the two modes never
+ * race. See docs/design.md's "Parse choreography" for the skeleton/glow
+ * choreography, which is lifted into Home.tsx/PosterGrid.tsx via
+ * `onParseStart`/`onParseSettled` above since it renders on the wall itself,
+ * not in this modal.
  *
  * "Already added" tracking: `ShowCardDto` (`GET /shows`'s wire shape) has no
  * `tmdb_id`, so there's no shared key to match a search result back to an
@@ -87,7 +171,7 @@ interface SpotlightPaletteProps {
  * opened won't show as already-added until it's added again here — a real,
  * accepted gap for this ticket, not solved by adding a backend endpoint.
  */
-export function SpotlightPalette({ open, onClose, onShowAdded }: SpotlightPaletteProps) {
+export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onParseSettled }: SpotlightPaletteProps) {
   const { getToken } = useAuth();
   const [query, setQuery] = useState("");
   const [searchState, setSearchState] = useState<SearchState>({ status: "idle" });
@@ -95,15 +179,25 @@ export function SpotlightPalette({ open, onClose, onShowAdded }: SpotlightPalett
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [addingId, setAddingId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [parseState, setParseState] = useState<ParseState>({ status: "idle" });
+  // The setter is all this component needs — ambiguous mentions are kept
+  // only so a parse response with resolved/unmatched *and* ambiguous
+  // mentions doesn't lose the ambiguous ones; #13 (the Disambiguation Step)
+  // is the ticket that will actually read them back out.
+  const [, setAmbiguousMentions] = useState<AmbiguousMentionWire[]>([]);
   const requestIdRef = useRef(0);
 
   // `trimmedQuery === ""` alone already hides suggestions/loading/error at
   // render time (below), so there's no separate "idle" reset to perform
   // when the query is cleared — stale `searchState` just goes unrendered.
   const trimmedQuery = query.trim();
+  const nlpMode = trimmedQuery !== "" && isNlpMode(trimmedQuery);
 
   useEffect(() => {
-    if (!open || trimmedQuery === "") return;
+    // NLP-mode input skips the typeahead search entirely (#12 AC:
+    // "suggestions yield") — the two modes call different endpoints and
+    // shouldn't race.
+    if (!open || trimmedQuery === "" || nlpMode) return;
 
     const requestId = ++requestIdRef.current;
 
@@ -141,7 +235,42 @@ export function SpotlightPalette({ open, onClose, onShowAdded }: SpotlightPalett
     }, SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [trimmedQuery, open, getToken]);
+  }, [trimmedQuery, open, getToken, nlpMode]);
+
+  async function handleParse() {
+    if (parseState.status === "loading") return;
+
+    const text = trimmedQuery;
+    setParseState({ status: "loading" });
+    setErrorMessage(null);
+    onParseStart?.(estimateMentionCount(text));
+
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_URL}/shows/parse`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) throw new Error(`POST /shows/parse failed: ${response.status}`);
+
+      const body = (await response.json()) as ParseResponseWire;
+      setAmbiguousMentions(body.ambiguous);
+      setParseState({ status: "done", unmatched: body.unmatched });
+      onParseSettled?.(body.resolved.map((show) => show.id));
+      // Nothing left to fix — clear the box for the next command. When
+      // there's unmatched text, the query is left as-is (AC: "the original
+      // text still visible").
+      if (body.unmatched.length === 0) setQuery("");
+    } catch {
+      setParseState({ status: "idle" });
+      setErrorMessage("Couldn't parse that. Check the spelling, or try again.");
+      onParseSettled?.([]);
+    }
+  }
 
   async function handleAdd(result: SearchResult) {
     if (addedIds.has(result.tmdbId) || addingId !== null) return;
@@ -171,6 +300,14 @@ export function SpotlightPalette({ open, onClose, onShowAdded }: SpotlightPalett
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (nlpMode) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void handleParse();
+      }
+      return;
+    }
+
     if (searchState.status !== "ready" || searchState.results.length === 0) return;
     const { results } = searchState;
 
@@ -201,8 +338,12 @@ export function SpotlightPalette({ open, onClose, onShowAdded }: SpotlightPalett
     setSearchState({ status: "idle" });
     setHighlightedIndex(0);
     setErrorMessage(null);
+    setParseState({ status: "idle" });
+    setAmbiguousMentions([]);
     onClose();
   }
+
+  const mentionCount = estimateMentionCount(trimmedQuery);
 
   return (
     <Modal open={open} onClose={handleClose} ariaLabel="Spotlight palette">
@@ -211,7 +352,13 @@ export function SpotlightPalette({ open, onClose, onShowAdded }: SpotlightPalett
           type="text"
           autoFocus
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            // A fresh edit invalidates a stale "done" parse result (the
+            // unmatched strip, in particular) — go back to idle rather than
+            // showing feedback for text that's no longer what's typed.
+            setParseState({ status: "idle" });
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Log watching…"
           aria-label="Search for a show"
@@ -226,13 +373,13 @@ export function SpotlightPalette({ open, onClose, onShowAdded }: SpotlightPalett
 
         {trimmedQuery === "" && <HelperExamples onPick={setQuery} />}
 
-        {trimmedQuery !== "" && searchState.status === "loading" && (
+        {trimmedQuery !== "" && !nlpMode && searchState.status === "loading" && (
           <p role="status" className="text-sm text-muted-foreground">
             Searching…
           </p>
         )}
 
-        {trimmedQuery !== "" && searchState.status === "ready" && (
+        {trimmedQuery !== "" && !nlpMode && searchState.status === "ready" && (
           <ul aria-label="Suggestions" role="listbox" className="flex flex-col gap-1">
             {searchState.results.map((result, index) => (
               <SuggestionRow
@@ -246,30 +393,90 @@ export function SpotlightPalette({ open, onClose, onShowAdded }: SpotlightPalett
             ))}
           </ul>
         )}
+
+        {trimmedQuery !== "" && nlpMode && (
+          <div className="flex flex-col gap-3">
+            {parseState.status === "loading" ? (
+              <DotsPill />
+            ) : (
+              <Button type="button" className="w-fit" onClick={() => void handleParse()}>
+                {`Add ${mentionCount} ${mentionCount === 1 ? "show" : "shows"}`}
+              </Button>
+            )}
+
+            {parseState.status === "done" && parseState.unmatched.length > 0 && <UnmatchedStrip />}
+          </div>
+        )}
       </div>
     </Modal>
   );
 }
 
-function HelperExamples({ onPick }: { onPick: (title: string) => void }) {
+function HelperExamples({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm text-muted-foreground">Try one of these</p>
       <ul className="flex flex-col gap-1">
-        {HELPER_EXAMPLES.map((title) => (
-          <li key={title}>
+        {HELPER_EXAMPLES.map((example) => (
+          <li key={example.text}>
             <Button
               type="button"
               variant="secondary"
-              className="w-full justify-start"
-              onClick={() => onPick(title)}
+              className="h-auto w-full flex-col items-start gap-0.5 py-2"
+              onClick={() => onPick(example.text)}
             >
-              {title}
+              <span>{example.text}</span>
+              <span className="text-xs font-normal text-muted-foreground">{example.caption}</span>
             </Button>
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * The dots-pill loading indicator (#12, docs/design.md: "Parse
+ * choreography: dots-pill + shimmer skeleton cards..."). Placed here, next
+ * to the CTA it replaces while a parse is in flight, rather than by the FAB
+ * or on the grid — the grid's own feedback is the shimmer skeleton cards
+ * (PosterGrid.tsx), and the FAB has no state of its own once the palette is
+ * open.
+ */
+function DotsPill() {
+  return (
+    <div
+      role="status"
+      className="flex w-fit items-center gap-1.5 rounded-full bg-[var(--surface-2)] px-3 py-2"
+    >
+      <span className="sr-only">Parsing…</span>
+      <span
+        aria-hidden="true"
+        className="size-1.5 animate-bounce rounded-full bg-[var(--ink-muted)] motion-reduce:animate-none [animation-delay:-0.3s]"
+      />
+      <span
+        aria-hidden="true"
+        className="size-1.5 animate-bounce rounded-full bg-[var(--ink-muted)] motion-reduce:animate-none [animation-delay:-0.15s]"
+      />
+      <span
+        aria-hidden="true"
+        className="size-1.5 animate-bounce rounded-full bg-[var(--ink-muted)] motion-reduce:animate-none"
+      />
+    </div>
+  );
+}
+
+/**
+ * A parse that couldn't match some text (docs/design.md's error section,
+ * exact copy). Inline and non-dismissing, not a toast/modal — the AC is
+ * "not a dead end", and the typed text stays visible because `handleParse`
+ * deliberately leaves `query` untouched whenever `unmatched` is non-empty.
+ */
+function UnmatchedStrip() {
+  return (
+    <p role="alert" className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] p-3 text-sm text-muted-foreground">
+      Couldn&apos;t match that. Check the spelling, or try &quot;show name 3 seasons&quot;.
+    </p>
   );
 }
 
