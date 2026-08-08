@@ -165,3 +165,40 @@ a {
 @utility bg-surface {
   background: var(--surface);
 }
+
+/* Parse choreography (#12, docs/design.md: "dots-pill + shimmer skeleton
+   cards where shows will land; landed cards pop with a brief accent glow
+   (1.4s)"). Declared as Tailwind v4 theme animations — same pattern as the
+   --shadow-* tokens above — so components reach for plain `animate-shimmer`
+   / `animate-glow-pop` classes and the prefers-reduced-motion opt-out stays
+   a Tailwind `motion-reduce:animate-none` variant, matching how PosterTile's
+   hover transition already opts out via `motion-reduce:[transition:none]`,
+   rather than a JS matchMedia check. */
+@theme {
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  --animate-glow-pop: glow-pop 1.4s ease-out;
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes glow-pop {
+  0% {
+    box-shadow: 0 0 0 0 rgba(200, 28, 40, 0);
+  }
+  30% {
+    box-shadow:
+      0 0 0 3px rgba(232, 67, 79, 0.65),
+      0 0 22px 6px rgba(200, 28, 40, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(200, 28, 40, 0);
+  }
+}

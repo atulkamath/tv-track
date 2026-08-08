@@ -100,3 +100,81 @@ describe("Home", () => {
     expect(await screen.findByRole("dialog", { name: "Spotlight palette" })).toBeInTheDocument();
   });
 });
+
+const RESOLVED_SHOW = { id: "s1", title: "Breaking Bad", poster_path: null, watch_state: "full" };
+const EXISTING_SHOW = { id: "s0", title: "Existing Show", poster_path: null, watch_state: "full" };
+
+describe("Home — parse choreography (#12): pending-parse state lifted from the palette onto PosterGrid", () => {
+  beforeEach(() => {
+    mockGetToken.mockResolvedValue("token-123");
+    server.use(http.get(`${API_URL}/me`, () => HttpResponse.json({ id: "u1", friend_code: "ABC123" })));
+  });
+
+  async function openPaletteAndType(user: ReturnType<typeof userEvent.setup>, text: string) {
+    await user.click(screen.getByRole("button", { name: "Log watching" }));
+    const input = await screen.findByRole("textbox", { name: /search for a show/i });
+    await user.type(input, text);
+    return input;
+  }
+
+  it("renders skeleton cards on the poster wall itself while a parse is pending, then real tiles once it resolves — with a glow-pop on only the newly-landed one", async () => {
+    server.use(http.get(`${API_URL}/shows`, () => HttpResponse.json([EXISTING_SHOW])));
+    let resolveParse!: (response: Response) => void;
+    server.use(
+      http.post(
+        `${API_URL}/shows/parse`,
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveParse = resolve;
+          }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp(<Home />);
+    await screen.findByTestId("poster-tile");
+
+    await openPaletteAndType(user, "breaking bad 3 seasons{Enter}");
+
+    // The skeleton lands on the grid behind the still-open palette, in the
+    // position the resolved show is about to occupy — not just inside the
+    // modal. (The palette stays open here — same as a single-title add — so
+    // the rest of the page is legitimately `aria-hidden`/inert per the
+    // Dialog primitive while it's up; that's why the assertions below query
+    // by test id/text rather than role.)
+    expect(await screen.findByTestId("poster-skeleton")).toBeInTheDocument();
+    expect(screen.getByTestId("poster-tile")).toBeInTheDocument();
+
+    server.use(http.get(`${API_URL}/shows`, () => HttpResponse.json([EXISTING_SHOW, RESOLVED_SHOW])));
+    resolveParse(HttpResponse.json({ resolved: [RESOLVED_SHOW], ambiguous: [], unmatched: [] }));
+
+    await waitFor(() => expect(screen.queryByTestId("poster-skeleton")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByTestId("poster-tile")).toHaveLength(2));
+
+    const tiles = screen.getAllByTestId("poster-tile");
+    const newTile = tiles.find((tile) => tile.textContent?.includes(RESOLVED_SHOW.title));
+    const existingTile = tiles.find((tile) => tile.textContent?.includes(EXISTING_SHOW.title));
+    expect(newTile).toHaveClass("animate-glow-pop");
+    expect(existingTile).not.toHaveClass("animate-glow-pop");
+
+    // "then settle" (docs/design.md) — the glow is transient, not permanent.
+    await waitFor(() => expect(newTile).not.toHaveClass("animate-glow-pop"), { timeout: 3000 });
+  });
+
+  it("clears the skeleton without landing anything when a parse resolves nothing (e.g. fully unmatched)", async () => {
+    server.use(http.get(`${API_URL}/shows`, () => HttpResponse.json([])));
+    server.use(
+      http.post(`${API_URL}/shows/parse`, () =>
+        HttpResponse.json({ resolved: [], ambiguous: [], unmatched: [{ title: "xzyabc", reason: "no_tmdb_match" }] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderApp(<Home />);
+    await screen.findByText(/nothing here yet/i);
+
+    await openPaletteAndType(user, "xzyabc 2 seasons{Enter}");
+
+    await screen.findByRole("alert");
+    await waitFor(() => expect(screen.queryByTestId("poster-skeleton")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("poster-tile")).not.toBeInTheDocument();
+  });
+});
