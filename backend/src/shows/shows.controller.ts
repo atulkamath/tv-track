@@ -14,6 +14,7 @@ import {
 import type { User } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CreateShowDto } from './create-show.dto';
+import { ParseShowsDto, type ParseShowsResultDto } from './parse-shows.dto';
 import { SearchShowsQueryDto, toShowSearchResultDto, type ShowSearchResultDto } from './search-shows.dto';
 import type { ShowCardDto, ShowDetailDto } from './show.dto';
 import { ShowsService } from './shows.service';
@@ -34,6 +35,12 @@ export class ShowsController {
   @Post()
   async create(@CurrentUser() user: User, @Body() body: CreateShowDto): Promise<ShowCardDto> {
     return this.shows.addShow(user, body);
+  }
+
+  /** NLP Entry: free text in, resolved cards + a Disambiguation Step queue + unmatched leftovers out. */
+  @Post('parse')
+  async parse(@CurrentUser() user: User, @Body() body: ParseShowsDto): Promise<ParseShowsResultDto> {
+    return this.shows.parseText(user, body.text);
   }
 
   /** The caller's home list: every show they've watched at least one episode of. */

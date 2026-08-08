@@ -4,6 +4,21 @@ import type { TmdbClient, TmdbShowDetail, TmdbShowSummary } from './tmdb-client'
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
+/**
+ * How many search hits survive to the caller. TMDB returns up to 20, and each
+ * one costs an extra `/tv/{id}` call to fill in `episodeCount` — so an
+ * uncapped search for a common title like "The Office" is 21 round trips for
+ * one show, and a sentence naming three shows could run past 60.
+ *
+ * Five is enough for the Disambiguation Step: the real same-name collisions
+ * (The Office US/UK, the Doctor Who reboots) sit at the top of the ranking,
+ * and a list longer than five is its own usability problem. The trade is that
+ * an exact-title match with very low popularity can fall outside the cut —
+ * "The Office" (1995) does exactly that — which is what the "something else"
+ * escape in the confirm step is for.
+ */
+const MAX_SEARCH_RESULTS = 5;
+
 interface TmdbSearchResult {
   id: number;
   name: string;
@@ -16,6 +31,12 @@ interface TmdbSearchResult {
    * whichever later ticket displays the poster, not this passthrough's job.
    */
   poster_path: string | null;
+  /**
+   * TMDB's own popularity score. Absent from some responses (and from older
+   * test fixtures), so read it defensively — a missing score sorts last and
+   * leaves TMDB's original ordering intact.
+   */
+  popularity?: number;
 }
 
 interface TmdbSearchResponse {
@@ -70,13 +91,19 @@ export class TmdbHttpClient implements TmdbClient {
   async searchShows(query: string): Promise<TmdbShowSummary[]> {
     const results = await this.getJson<TmdbSearchResponse>('/search/tv', { query });
 
+    // Ranked and cut *before* the episode-count fan-out below, which is the
+    // whole point — trimming afterwards would still pay for every call.
+    const candidates = [...results.results]
+      .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+      .slice(0, MAX_SEARCH_RESULTS);
+
     // TMDB's /search/tv response carries no episode count — that field only
     // exists on the per-show details endpoint — so satisfying
     // TmdbShowSummary's episodeCount contract costs one extra call per
     // candidate. ShowsService's query-level cache is what keeps this from
     // hammering TMDB on repeat searches; it does not collapse this fan-out.
     return Promise.all(
-      results.results.map(async (result) => ({
+      candidates.map(async (result) => ({
         tmdbId: result.id,
         title: result.name,
         year: parseYear(result.first_air_date),

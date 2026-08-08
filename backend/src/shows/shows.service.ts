@@ -1,8 +1,16 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { LLM_CLIENT, type LlmClient } from '../integrations/llm/llm-client';
 import { TMDB_CLIENT, type TmdbClient, type TmdbShowSummary } from '../integrations/tmdb/tmdb-client';
 import type { CreateShowDto } from './create-show.dto';
+import { pickConfidentMatch } from './match-candidate';
+import {
+  toAmbiguousMentionDto,
+  type AmbiguousMentionDto,
+  type ParseShowsResultDto,
+  type UnmatchedMentionDto,
+} from './parse-shows.dto';
 import { toShowCardDto, toShowDetailDto, type ShowCardDto, type ShowDetailDto, type ShowTree } from './show.dto';
 import type { ToggleWatchedDto } from './toggle-watched.dto';
 
@@ -49,6 +57,7 @@ export class ShowsService {
 
   constructor(
     @Inject(TMDB_CLIENT) private readonly tmdb: TmdbClient,
+    @Inject(LLM_CLIENT) private readonly llm: LlmClient,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -82,6 +91,47 @@ export class ShowsService {
       include: showTreeInclude(user.id),
     });
     return toShowCardDto(show);
+  }
+
+  /**
+   * Backs `POST /shows/parse` (#11). Runs the LLM once for the whole
+   * sentence, then resolves each mention against TMDB independently — one
+   * mention failing to resolve never blocks the others. A mention whose
+   * `seasons` came back `[]` (LLM understood the show but not how much was
+   * watched) never reaches TMDB at all: creating it anyway would either
+   * silently write nothing (an empty `seasons` filter matches no season) or,
+   * worse, get misread as "mark it all watched."
+   */
+  async parseText(user: User, text: string): Promise<ParseShowsResultDto> {
+    const mentions = await this.llm.parseShowMentions(text);
+
+    const resolved: ShowCardDto[] = [];
+    const ambiguous: AmbiguousMentionDto[] = [];
+    const unmatched: UnmatchedMentionDto[] = [];
+
+    for (const mention of mentions) {
+      if (mention.seasons !== null && mention.seasons.length === 0) {
+        unmatched.push({ title: mention.title, reason: 'progress_not_understood' });
+        continue;
+      }
+
+      const candidates = await this.search(mention.title);
+      if (candidates.length === 0) {
+        unmatched.push({ title: mention.title, reason: 'no_tmdb_match' });
+        continue;
+      }
+
+      const match = pickConfidentMatch(mention.title, candidates);
+      if (!match) {
+        ambiguous.push(toAmbiguousMentionDto(mention.title, mention.seasons, candidates));
+        continue;
+      }
+
+      const card = await this.addShow(user, { tmdb_id: match.tmdbId, seasons: mention.seasons ?? undefined });
+      resolved.push(card);
+    }
+
+    return { resolved, ambiguous, unmatched };
   }
 
   /** Backs `GET /shows` — every show the caller has watched at least one episode of. */

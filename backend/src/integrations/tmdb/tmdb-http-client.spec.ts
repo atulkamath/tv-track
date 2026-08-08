@@ -53,6 +53,30 @@ describe('TmdbHttpClient', () => {
     expect(searchInit.headers).toEqual({ Authorization: 'Bearer test-token' });
   });
 
+  it('keeps only the five most popular hits, and never pays for the episode counts of the rest', async () => {
+    // Ten hits in deliberately shuffled popularity order — a real "The Office"
+    // search returns twenty, each costing a /tv/{id} call it must not make.
+    const results = [9, 3, 10, 1, 7, 5, 8, 2, 6, 4].map((popularity, index) => ({
+      id: index + 1,
+      name: `Show ${index + 1}`,
+      first_air_date: '2005-01-01',
+      poster_path: null,
+      popularity,
+    }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ results }));
+    for (let call = 0; call < 5; call += 1) {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ number_of_episodes: 10 }));
+    }
+
+    const client = new TmdbHttpClient(config({ TMDB_ACCESS_TOKEN: 'test-token' }));
+    const summaries = await client.searchShows('the office');
+
+    // Popularity 10, 9, 8, 7, 6 — ids 3, 1, 7, 5, 9.
+    expect(summaries.map((summary) => summary.tmdbId)).toEqual([3, 1, 7, 5, 9]);
+    // One search plus five detail calls, not one plus ten.
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
   it('treats a missing air date and episode count as null/zero rather than throwing', async () => {
     fetchMock
       .mockResolvedValueOnce(

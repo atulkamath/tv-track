@@ -1,24 +1,32 @@
 import { Module, NotImplementedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { LLM_CLIENT, type LlmClient } from './llm/llm-client';
+import { OpenRouterLlmClient } from './llm/openrouter-llm-client';
 import { TMDB_CLIENT } from './tmdb/tmdb-client';
 import { TmdbHttpClient } from './tmdb/tmdb-http-client';
 
 /**
- * Outbound clients, bound to their interfaces. The real TMDB implementation
- * backs `GET /shows/search`; the LLM client's real implementation arrives with
- * `POST /shows/parse` — until then this placeholder fails loudly rather than
- * silently returning empty results. Tests override both tokens with fakes.
+ * `OPENROUTER_API_KEY` is optional (see `.env.example`) — without it the API
+ * still boots, and only `POST /shows/parse` fails, loudly, rather than
+ * silently returning empty results. Tests override `LLM_CLIENT` with a fake
+ * either way, so this placeholder is only ever seen by a real checkout that
+ * hasn't configured OpenRouter yet.
  */
 const unimplementedLlmClient: LlmClient = {
   parseShowMentions() {
-    return Promise.reject(new NotImplementedException('LLM client not wired up yet.'));
+    return Promise.reject(new NotImplementedException('OPENROUTER_API_KEY is not set — LLM parsing is unavailable.'));
   },
 };
 
 @Module({
   providers: [
     { provide: TMDB_CLIENT, useClass: TmdbHttpClient },
-    { provide: LLM_CLIENT, useValue: unimplementedLlmClient },
+    {
+      provide: LLM_CLIENT,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService): LlmClient =>
+        config.get<string>('OPENROUTER_API_KEY') ? new OpenRouterLlmClient(config) : unimplementedLlmClient,
+    },
   ],
   exports: [TMDB_CLIENT, LLM_CLIENT],
 })
