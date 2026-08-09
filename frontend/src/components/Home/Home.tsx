@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Plus } from "lucide-react";
@@ -10,6 +10,7 @@ import { PosterGrid } from "@/components/PosterGrid/PosterGrid";
 import { Leaderboard } from "@/components/Leaderboard/Leaderboard";
 import { Settings } from "@/components/Settings/Settings";
 import { SpotlightPalette, type AmbiguousMentionWire } from "@/components/SpotlightPalette/SpotlightPalette";
+import { WatchTimeStat } from "@/components/WatchTimeStat/WatchTimeStat";
 import { Button } from "@/components/ui/button";
 
 /** The NestJS backend this frontend calls cross-origin (ADR 0004). */
@@ -57,8 +58,31 @@ export function Home() {
   // fired on every settled `GET /shows` attempt, success or failure, so this
   // never gets stuck true if that refetch happens to error out.
   const [awaitingWallUpdate, setAwaitingWallUpdate] = useState(false);
+  // "The sidebar shows your Watch Time and rank at all times" (#1's Solution
+  // section) — bumped by every mutation that could change it: a typeahead
+  // add, a resolved parse, a Disambiguation pick, or (via PosterGrid's
+  // `onShowsChanged`) an episode/season toggle, mark-all, or delete inside
+  // the Show Detail modal. Deliberately its own counter, not a reuse of
+  // `showsRefreshKey` — that one is PosterGrid's own refetch trigger, and an
+  // episode toggle already refetches PosterGrid internally, so feeding the
+  // same counter back in as a prop would make it refetch itself twice.
+  const [watchTimeRefreshKey, setWatchTimeRefreshKey] = useState(0);
   const { getToken } = useAuth();
   const router = useRouter();
+
+  // A stable identity, not an inline arrow in the JSX below: PosterGrid's
+  // `loadShows` is a `useCallback` depending on this prop, so a fresh
+  // function reference every Home render would re-trigger PosterGrid's
+  // mount effect and cause an extra `GET /shows` on every unrelated Home
+  // re-render (nav clicks, palette open/close, etc.), not just on mount and
+  // an actual `refreshKey` bump.
+  const handleShowsLoaded = useCallback(() => setAwaitingWallUpdate(false), []);
+  const handleShowsChanged = useCallback(() => setWatchTimeRefreshKey((key) => key + 1), []);
+
+  function handleShowAdded() {
+    setShowsRefreshKey((key) => key + 1);
+    setWatchTimeRefreshKey((key) => key + 1);
+  }
 
   function handleParseSettled(resolvedShowIds: string[]) {
     setPendingParseCount(0);
@@ -66,6 +90,7 @@ export function Home() {
 
     setAwaitingWallUpdate(true);
     setShowsRefreshKey((key) => key + 1);
+    setWatchTimeRefreshKey((key) => key + 1);
     setGlowShowIds(resolvedShowIds);
     window.setTimeout(() => setGlowShowIds([]), GLOW_DURATION_MS);
   }
@@ -99,7 +124,12 @@ export function Home() {
 
   return (
     <>
-      <AppShell active={active} onNavigate={setActive}>
+      <AppShell
+        active={active}
+        onNavigate={setActive}
+        sidebarExtra={<WatchTimeStat variant="sidebar" refreshKey={watchTimeRefreshKey} />}
+        topStripExtra={<WatchTimeStat variant="topStrip" refreshKey={watchTimeRefreshKey} />}
+      >
         {renderScreen(active, {
           onAddFriend: () => setActive("settings"),
           onOpenPalette: () => setPaletteOpen(true),
@@ -108,7 +138,8 @@ export function Home() {
           onFriendAccepted: () => setFriendsRefreshKey((key) => key + 1),
           pendingParseCount,
           glowShowIds,
-          onShowsLoaded: () => setAwaitingWallUpdate(false),
+          onShowsLoaded: handleShowsLoaded,
+          onShowsChanged: handleShowsChanged,
         })}
       </AppShell>
       {/* The Spotlight palette's FAB (#8, docs/design.md): full-round,
@@ -117,14 +148,14 @@ export function Home() {
       <Button
         onClick={() => setPaletteOpen(true)}
         aria-label="Log watching"
-        className="fixed right-6 bottom-6 z-20 size-14 rounded-full p-0 shadow-modal"
+        className="fixed right-6 bottom-6 z-20 size-14 rounded-full bg-brand p-0 text-brand-foreground shadow-lg hover:bg-brand/90"
       >
         <Plus className="size-6" aria-hidden="true" />
       </Button>
       <SpotlightPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
-        onShowAdded={() => setShowsRefreshKey((key) => key + 1)}
+        onShowAdded={handleShowAdded}
         onParseStart={setPendingParseCount}
         onParseSettled={handleParseSettled}
         onAmbiguous={handleAmbiguous}
@@ -138,7 +169,7 @@ export function Home() {
           key={ambiguousBatchId}
           mentions={ambiguousQueue}
           onDone={() => setAmbiguousQueue([])}
-          onShowAdded={() => setShowsRefreshKey((key) => key + 1)}
+          onShowAdded={handleShowAdded}
         />
       )}
     </>
@@ -158,6 +189,7 @@ function renderScreen(
     pendingParseCount,
     glowShowIds,
     onShowsLoaded,
+    onShowsChanged,
   }: {
     onAddFriend: () => void;
     onOpenPalette: () => void;
@@ -167,6 +199,7 @@ function renderScreen(
     pendingParseCount: number;
     glowShowIds: string[];
     onShowsLoaded: () => void;
+    onShowsChanged: () => void;
   },
 ) {
   switch (active) {
@@ -178,6 +211,7 @@ function renderScreen(
           pendingSkeletonCount={pendingParseCount}
           glowShowIds={glowShowIds}
           onShowsLoaded={onShowsLoaded}
+          onShowsChanged={onShowsChanged}
         />
       );
     case "leaderboard":

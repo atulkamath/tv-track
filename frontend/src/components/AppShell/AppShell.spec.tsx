@@ -51,4 +51,28 @@ describe("AppShell", () => {
     );
     expect(screen.getByText("unique child content")).toBeInTheDocument();
   });
+
+  it("renders sidebarExtra and topStripExtra in their own slots, once each", () => {
+    renderApp(
+      <AppShell
+        active="home"
+        sidebarExtra={<p>sidebar stat</p>}
+        topStripExtra={<p>strip stat</p>}
+      >
+        <p>content</p>
+      </AppShell>,
+    );
+    expect(screen.getAllByText("sidebar stat")).toHaveLength(1);
+    expect(screen.getAllByText("strip stat")).toHaveLength(1);
+  });
+
+  it("renders neither slot when not passed, unlike Home/Leaderboard/Settings which always render twice", () => {
+    renderApp(
+      <AppShell active="home">
+        <p>content</p>
+      </AppShell>,
+    );
+    expect(screen.queryByText("sidebar stat")).not.toBeInTheDocument();
+    expect(screen.queryByText("strip stat")).not.toBeInTheDocument();
+  });
 });

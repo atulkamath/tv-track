@@ -24,6 +24,9 @@ beforeEach(() => {
   // default so tests concerned with the `/me` call don't also have to stub
   // `/shows` just to avoid an unhandled-request error.
   server.use(http.get(`${API_URL}/shows`, () => HttpResponse.json([])));
+  // WatchTimeStat (rendered unconditionally in AppShell's sidebar/top-strip
+  // slots) makes its own `GET /leaderboard` call the same way — same reason.
+  server.use(http.get(`${API_URL}/leaderboard`, () => HttpResponse.json([])));
 });
 
 describe("Home", () => {
@@ -104,18 +107,18 @@ describe("Home", () => {
 const RESOLVED_SHOW = { id: "s1", title: "Breaking Bad", poster_path: null, watch_state: "full" };
 const EXISTING_SHOW = { id: "s0", title: "Existing Show", poster_path: null, watch_state: "full" };
 
+async function openPaletteAndType(user: ReturnType<typeof userEvent.setup>, text: string) {
+  await user.click(screen.getByRole("button", { name: "Log watching" }));
+  const input = await screen.findByRole("textbox", { name: /search for a show/i });
+  await user.type(input, text);
+  return input;
+}
+
 describe("Home — parse choreography (#12): pending-parse state lifted from the palette onto PosterGrid", () => {
   beforeEach(() => {
     mockGetToken.mockResolvedValue("token-123");
     server.use(http.get(`${API_URL}/me`, () => HttpResponse.json({ id: "u1", friend_code: "ABC123" })));
   });
-
-  async function openPaletteAndType(user: ReturnType<typeof userEvent.setup>, text: string) {
-    await user.click(screen.getByRole("button", { name: "Log watching" }));
-    const input = await screen.findByRole("textbox", { name: /search for a show/i });
-    await user.type(input, text);
-    return input;
-  }
 
   it("renders skeleton cards on the poster wall itself while a parse is pending, then real tiles once it resolves — with a glow-pop on only the newly-landed one", async () => {
     server.use(http.get(`${API_URL}/shows`, () => HttpResponse.json([EXISTING_SHOW])));
@@ -176,5 +179,36 @@ describe("Home — parse choreography (#12): pending-parse state lifted from the
     await screen.findByRole("alert");
     await waitFor(() => expect(screen.queryByTestId("poster-skeleton")).not.toBeInTheDocument());
     expect(screen.queryByTestId("poster-tile")).not.toBeInTheDocument();
+  });
+});
+
+describe("Home — sidebar Watch Time (#1: \"the sidebar shows your Watch Time and rank at all times\")", () => {
+  beforeEach(() => {
+    mockGetToken.mockResolvedValue("token-123");
+    server.use(http.get(`${API_URL}/me`, () => HttpResponse.json({ id: "u1", friend_code: "ABC123" })));
+  });
+
+  it("shows the caller's Watch Time and rank, and updates them after a resolved parse — the same trigger that refreshes the poster wall", async () => {
+    server.use(http.get(`${API_URL}/shows`, () => HttpResponse.json([])));
+    server.use(http.get(`${API_URL}/leaderboard`, () => HttpResponse.json([{ id: "u1", watch_time_minutes: 60, is_self: true }])));
+    const user = userEvent.setup();
+    renderApp(<Home />);
+
+    // Rendered twice — the desktop sidebar and the mobile top strip both
+    // show it at all times (#1's Solution section), same as AppShell's own
+    // nav labels; only the sidebar variant also spells out "Rank #N".
+    await waitFor(() => expect(screen.getAllByText("1h 0m")).toHaveLength(2));
+    expect(screen.getByText("Rank #1")).toBeInTheDocument();
+
+    server.use(http.get(`${API_URL}/shows`, () => HttpResponse.json([RESOLVED_SHOW])));
+    server.use(http.get(`${API_URL}/leaderboard`, () => HttpResponse.json([{ id: "u1", watch_time_minutes: 260, is_self: true }])));
+    server.use(
+      http.post(`${API_URL}/shows/parse`, () =>
+        HttpResponse.json({ resolved: [RESOLVED_SHOW], ambiguous: [], unmatched: [] }),
+      ),
+    );
+    await openPaletteAndType(user, "breaking bad 3 seasons{Enter}");
+
+    await waitFor(() => expect(screen.getAllByText("4h 20m")).toHaveLength(2));
   });
 });

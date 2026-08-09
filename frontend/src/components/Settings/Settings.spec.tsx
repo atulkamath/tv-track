@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import userEvent from "@testing-library/user-event";
@@ -9,6 +10,10 @@ const mockGetToken = vi.fn();
 
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ getToken: mockGetToken }),
+  // A passthrough, not the real Clerk sign-out flow — this test suite only
+  // needs to confirm the row and its button render; Clerk's own SDK owns
+  // what happens on click.
+  SignOutButton: ({ children }: { children: ReactNode }) => children,
 }));
 
 beforeEach(() => {
@@ -193,5 +198,15 @@ describe("Settings", () => {
     expect(screen.getByText("Outgoing")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Accept" })).toBeInTheDocument();
     expect(screen.getByText("Pending")).toBeInTheDocument();
+  });
+
+  it("shows a Sign out row that states its consequence, per docs' copy rule", async () => {
+    mockProfile("AB2CD9");
+    mockRequests([], []);
+    renderApp(<Settings />);
+
+    await screen.findByText("Nothing pending. Share your code to get started.");
+    expect(screen.getByText("You'll need to sign in again next time.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
 });

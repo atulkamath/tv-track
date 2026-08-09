@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { SignOutButton, useAuth } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 
 /** The NestJS backend this frontend calls cross-origin (ADR 0004). Re-declared locally, not imported, to avoid a circular import with Home.tsx — same pattern as Leaderboard.tsx / PosterGrid.tsx. */
@@ -272,7 +272,8 @@ export function Settings({ onFriendAccepted }: SettingsProps) {
         )}
         {profileState.status === "ready" && (
           <div className="flex items-center gap-2">
-            <span className="rounded-md bg-[var(--surface-2)] px-3 py-1.5 font-mono text-sm font-bold tracking-[0.15em]">
+            {/* Extra right padding gives the tracked-out last character (plus its trailing letter-spacing) clear room instead of sitting flush against the edge. */}
+            <span className="rounded-md bg-muted py-1.5 pr-4 pl-3 font-mono text-sm font-bold tracking-[0.15em]">
               {profileState.friendCode}
             </span>
             <Button size="sm" variant="secondary" onClick={handleCopy}>
@@ -316,7 +317,7 @@ export function Settings({ onFriendAccepted }: SettingsProps) {
               onChange={(event) => setAddFriendValue(event.target.value)}
               placeholder="Friend Code or email"
               aria-label="Friend Code or email"
-              className="h-9 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="h-9 rounded-md border border-border bg-input/30 px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
             <Button type="submit" size="sm" disabled={sending || addFriendValue.trim() === ""}>
               Send request
@@ -358,10 +359,18 @@ export function Settings({ onFriendAccepted }: SettingsProps) {
         )}
       </div>
 
+      <SettingsRow label="Sign out" description="You'll need to sign in again next time.">
+        <SignOutButton redirectUrl="/">
+          <Button size="sm" variant="secondary">
+            Sign out
+          </Button>
+        </SignOutButton>
+      </SettingsRow>
+
       {copyToastVisible && (
         <p
           role="status"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-[var(--surface)] px-4 py-2 text-sm font-semibold shadow-modal"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-popover px-4 py-2 text-sm font-semibold shadow-lg"
         >
           Friend Code copied
         </p>
@@ -372,7 +381,9 @@ export function Settings({ onFriendAccepted }: SettingsProps) {
 
 function SettingsRow({ label, description, children }: { label: string; description: string; children: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] py-4 last:border-b-0">
+    // flex-wrap so a wide, unshrinkable value (e.g. the Friend Code chip + Copy button) drops to
+    // its own line on narrow viewports instead of overflowing — html/body clip overflow-x globally.
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-border py-4 last:border-b-0">
       <div className="flex flex-col gap-0.5">
         <span className="text-sm font-bold">{label}</span>
         <span className="text-sm text-muted-foreground">{description}</span>
@@ -408,7 +419,7 @@ function PendingRequests({
             {incoming.map((request) => (
               <li
                 key={request.id}
-                className="flex items-center justify-between gap-3 border-b border-[var(--line-soft)] py-2 last:border-b-0"
+                className="flex items-center justify-between gap-3 border-b border-border/50 py-2 last:border-b-0"
               >
                 <span className="min-w-0 flex-1 truncate text-sm">{request.email}</span>
                 <div className="flex shrink-0 gap-2">
@@ -436,7 +447,7 @@ function PendingRequests({
             {outgoing.map((request) => (
               <li
                 key={request.id}
-                className="flex items-center justify-between gap-3 border-b border-[var(--line-soft)] py-2 last:border-b-0"
+                className="flex items-center justify-between gap-3 border-b border-border/50 py-2 last:border-b-0"
               >
                 <span className="min-w-0 flex-1 truncate text-sm">{request.email}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">Pending</span>
