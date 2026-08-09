@@ -11,7 +11,7 @@ const figtree = Figtree({
 });
 
 export const metadata: Metadata = {
-  title: "tv-track",
+  title: "Tv Track",
   description: "Log what you watch. Outwatch your friends.",
 };
 

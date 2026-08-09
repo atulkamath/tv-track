@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Modal } from "@/components/Modal/Modal";
 import { Button } from "@/components/ui/button";
@@ -82,6 +82,13 @@ function watchStateLabel(state: WatchState): string {
   return "Not started";
 }
 
+/** Same color language as the poster grid's checkmark/progress-bar — full green, partial brand, not-started neutral. */
+function watchStateDotClass(state: WatchState): string {
+  if (state === "full") return "bg-green-500";
+  if (state === "partial") return "bg-brand";
+  return "bg-muted-foreground/40";
+}
+
 /** Replaces one episode's `watched` flag, leaving every other season/episode untouched — used for the single-episode optimistic tick. */
 function withEpisodeWatched(detail: ShowDetail, seasonNumber: number, episodeId: string, watched: boolean): ShowDetail {
   return {
@@ -123,25 +130,9 @@ interface ShowDetailModalProps {
 }
 
 /**
- * Show detail = centered modal (#10, docs/design.md): header with poster
- * thumb/title/watched-of-total count/show-level mark-all/close, then a body
- * of seasons collapsed by default — each with its own count, server-derived
- * `watch_state`, and mark-all, expanding inline to per-episode checkboxes.
- *
- * Scroll structure: the whole body (every season row) is one scroll
- * container (`overflow-y-auto`, capped independently of the Popup's own
- * `max-h-[84vh]` via a fixed `max-h` below, so SpotlightPalette's Popup
- * defaults — which it relies on for its own overflow — don't need to
- * change). Each season's header is `sticky top-0` *only while that season is
- * expanded*, which is what makes an expanded season's header stick while its
- * own episodes scroll past — the classic "stacking section headers" pattern,
- * not a per-season nested scroll box (793-episode shows would need 35 of
- * those, which reads worse than one shared scrollbar).
- *
- * All mutations are optimistic: flip local state immediately, then replace
- * it with the mutating endpoint's fresh `ShowDetailDto` on success, or
- * revert and show an inline `role="alert"` notice on failure — never a
- * partial, unbacked-by-the-server optimistic state left standing.
+ * Show detail modal: poster + title + one context-sensitive mark-all button,
+ * then seasons collapsed by default, expanding to per-episode checkboxes.
+ * Mutations are optimistic, reverted with an inline alert on failure.
  */
 export function ShowDetailModal({ showId, open, onClose, onChanged }: ShowDetailModalProps) {
   const { getToken } = useAuth();
@@ -393,36 +384,46 @@ function ShowDetailBody({
 }) {
   const episodes = detail.seasons.flatMap((season) => season.episodes);
   const watchedCount = episodes.filter((episode) => episode.watched).length;
+  const isShowFull = episodes.length > 0 && watchedCount === episodes.length;
 
   return (
-    <div className="flex flex-col">
-      <div data-testid="show-header" className="flex items-center gap-3 border-b border-[var(--line)] p-4">
+    <div className="relative flex flex-col">
+      {/* Modal-level chrome, not a content control — floats over everything rather than competing with the header's own row for space. */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute top-3 right-3 z-10 bg-background/60 backdrop-blur-sm"
+      >
+        <X className="size-4" aria-hidden="true" />
+      </Button>
+
+      <div data-testid="show-header" className="flex items-start gap-4 border-b border-border p-4">
         <PosterArt
           title={detail.title}
           posterUrl={detail.posterUrl}
-          className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-sm text-sm font-bold text-white"
+          className="relative flex aspect-[2/3] w-20 shrink-0 items-center justify-center overflow-hidden rounded-sm text-sm font-bold text-white shadow-md"
         />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h2 className="truncate text-base font-bold">{detail.title}</h2>
-          <p className="text-sm text-muted-foreground">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 pt-1">
+          <h2 className="truncate pr-8 text-lg font-extrabold">{detail.title}</h2>
+          <p className="text-sm text-muted-foreground tabular-nums">
             {watchedCount} of {episodes.length} watched
           </p>
-        </div>
-        <div className="flex shrink-0 flex-col gap-1">
-          <Button size="xs" variant="secondary" onClick={() => onShowMarkAll(true)} disabled={showActionBusy}>
-            Mark all watched
+          <Button
+            size="sm"
+            variant="secondary"
+            className="mt-1 w-fit"
+            onClick={() => onShowMarkAll(!isShowFull)}
+            disabled={showActionBusy}
+          >
+            {isShowFull ? "Unmark all" : "Mark all watched"}
           </Button>
-          <Button size="xs" variant="secondary" onClick={() => onShowMarkAll(false)} disabled={showActionBusy}>
-            Unmark all
-          </Button>
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
-          <X className="size-4" aria-hidden="true" />
-        </Button>
       </div>
 
       {errorMessage && (
-        <p role="alert" className="border-b border-[var(--line)] p-3 text-sm text-destructive">
+        <p role="alert" className="border-b border-border p-3 text-sm text-destructive">
           {errorMessage}
         </p>
       )}
@@ -442,7 +443,7 @@ function ShowDetailBody({
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-[var(--line)] p-4">
+      <div className="flex items-center justify-between gap-3 border-t border-border p-4">
         <p className="text-sm text-muted-foreground">This removes your watch history for this show.</p>
         <div className="flex shrink-0 items-center gap-2">
           {deleteArmed && (
@@ -477,16 +478,14 @@ function SeasonRow({
   onUnmarkAll: () => void;
 }) {
   const watched = season.episodes.filter((episode) => episode.watched).length;
+  const isSeasonFull = season.watchState === "full";
 
   return (
-    <div data-testid={`season-row-${season.seasonNumber}`} className="border-b border-[var(--line)]">
+    <div data-testid={`season-row-${season.seasonNumber}`} className="border-b border-border">
       <div
         className={cn(
-          "flex items-center gap-2 bg-[var(--surface-2)] px-4 py-2",
-          // Sticky only while expanded — a collapsed row is a single line
-          // with nothing beneath it to scroll past, so it doesn't need to
-          // stick. An expanded row sticks at the top of the shared
-          // scrolling body (below) while its own episode list scrolls.
+          "flex items-center gap-2 bg-muted px-4 py-2",
+          // Sticky only while expanded, so its episodes scroll beneath it.
           expanded && "sticky top-0 z-10",
         )}
       >
@@ -496,16 +495,23 @@ function SeasonRow({
           aria-expanded={expanded}
           className="flex flex-1 items-center gap-2 text-left text-sm"
         >
+          <ChevronRight
+            aria-hidden="true"
+            className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-150", expanded && "rotate-90")}
+          />
+          <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", watchStateDotClass(season.watchState))} />
           <span className="font-semibold">Season {season.seasonNumber}</span>
           <span className="text-muted-foreground">
             {watched} of {season.episodes.length} watched · {watchStateLabel(season.watchState)}
           </span>
         </button>
-        <Button size="xs" variant="secondary" onClick={onMarkAll} disabled={busy}>
-          Mark all watched
-        </Button>
-        <Button size="xs" variant="secondary" onClick={onUnmarkAll} disabled={busy}>
-          Unmark all
+        <Button
+          size="xs"
+          variant="secondary"
+          onClick={isSeasonFull ? onUnmarkAll : onMarkAll}
+          disabled={busy}
+        >
+          {isSeasonFull ? "Unmark all" : "Mark all watched"}
         </Button>
       </div>
       {expanded && (
@@ -517,7 +523,7 @@ function SeasonRow({
                 checked={episode.watched}
                 onChange={() => onToggleEpisode(episode)}
                 aria-label={`Season ${season.seasonNumber} episode ${episode.episodeNumber}`}
-                className="size-4 shrink-0 accent-[var(--accent-solid)]"
+                className="size-4 shrink-0 accent-primary"
               />
               <span className="text-sm">Episode {episode.episodeNumber}</span>
               {episode.runtimeMinutes !== null && (

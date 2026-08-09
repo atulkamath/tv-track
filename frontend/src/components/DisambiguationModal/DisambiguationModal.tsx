@@ -138,7 +138,7 @@ export function DisambiguationModal({ mentions, onDone, onShowAdded }: Disambigu
                 <PosterArt
                   title={candidate.title}
                   posterUrl={candidate.poster_path ? `${TMDB_IMAGE_BASE}${candidate.poster_path}` : null}
-                  className="relative aspect-[2/3] w-full overflow-hidden rounded-sm text-sm font-bold text-white shadow-card [transition:transform_150ms_ease] hover:scale-[1.03] motion-reduce:[transition:none]"
+                  className="relative aspect-[2/3] w-full overflow-hidden rounded-sm text-sm font-bold text-white shadow-md [transition:transform_150ms_ease] hover:scale-[1.03] motion-reduce:[transition:none]"
                 />
                 <span className="truncate text-sm font-semibold">{candidate.title}</span>
                 {candidate.year !== null && <span className="text-xs text-muted-foreground">{candidate.year}</span>}
@@ -164,7 +164,7 @@ function ProgressDots({ total, current }: { total: number; current: number }) {
           aria-hidden="true"
           className={cn(
             "size-1.5 rounded-full",
-            dotIndex === current ? "bg-[var(--accent-solid)]" : "bg-[var(--surface-2)]",
+            dotIndex === current ? "bg-primary" : "bg-muted",
           )}
         />
       ))}

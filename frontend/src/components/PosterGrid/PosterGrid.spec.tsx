@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import userEvent from "@testing-library/user-event";
 import { server } from "../../../test/server";
-import { renderApp, screen, fireEvent } from "../../../test/render";
+import { renderApp, screen, fireEvent, waitFor } from "../../../test/render";
 import { PosterGrid, API_URL } from "./PosterGrid";
 
 const mockGetToken = vi.fn();
@@ -25,6 +25,8 @@ const FULL_SHOW = {
   title: "Breaking Bad",
   poster_path: "/anFx9aTOOYqgS3v7x3R84Kz67ly.jpg",
   watch_state: "full",
+  watched_count: 4,
+  episode_count: 4,
 };
 
 const PARTIAL_SHOW = {
@@ -32,6 +34,8 @@ const PARTIAL_SHOW = {
   title: "The Wire",
   poster_path: "/4lbclFySvugI51fwsyxBTOm4DqK.jpg",
   watch_state: "partial",
+  watched_count: 1,
+  episode_count: 4,
 };
 
 const NOT_STARTED_SHOW = {
@@ -39,6 +43,8 @@ const NOT_STARTED_SHOW = {
   title: "The Office",
   poster_path: null,
   watch_state: "none",
+  watched_count: 0,
+  episode_count: 6,
 };
 
 describe("PosterGrid", () => {
@@ -46,6 +52,19 @@ describe("PosterGrid", () => {
     mockShows([]);
     renderApp(<PosterGrid />);
     expect(screen.getByRole("status")).toHaveTextContent(/loading/i);
+  });
+
+  it("shows shimmer skeleton tiles (not plain text) for the ordinary initial load, distinct from a parse's own pending skeletons", () => {
+    mockShows([]);
+    renderApp(<PosterGrid />);
+
+    const skeletons = screen.getAllByTestId("poster-skeleton-loading");
+    expect(skeletons).toHaveLength(12);
+    skeletons.forEach((skeleton) => {
+      expect(skeleton).toHaveClass("animate-pulse");
+      expect(skeleton).toHaveClass("motion-reduce:animate-none");
+    });
+    expect(screen.queryByTestId("poster-skeleton")).not.toBeInTheDocument();
   });
 
   it("shows an inline error if the request fails", async () => {
@@ -67,29 +86,28 @@ describe("PosterGrid", () => {
     expect(bar).toHaveStyle({ width: "100%" });
   });
 
-  it("renders a Partial show with a percentage label and a partial-width bar, computed from GET /shows/:id", async () => {
+  it("uses the brand accent for a Partial show's progress bar, and gives every tile a staggered entrance animation", async () => {
+    mockShows([PARTIAL_SHOW, FULL_SHOW]);
+    renderApp(<PosterGrid />);
+
+    const tiles = await screen.findAllByTestId("poster-tile");
+    expect(tiles).toHaveLength(2);
+
+    const partialBar = tiles[0].querySelector("div > div") as HTMLElement;
+    expect(partialBar).toHaveClass("bg-brand");
+
+    tiles.forEach((tile) => {
+      expect(tile).toHaveClass("animate-tile-in");
+      expect(tile).toHaveClass("motion-reduce:animate-none");
+    });
+    // Staggered, not identical — the second tile's delay is later than the first's.
+    expect(tiles[1].style.animationDelay).not.toBe(tiles[0].style.animationDelay);
+  });
+
+  it("renders a Partial show with a percentage label and a partial-width bar, computed straight from GET /shows (#19: no follow-up request)", async () => {
+    let detailCalled = false;
+    server.use(http.get(`${API_URL}/shows/${PARTIAL_SHOW.id}`, () => ((detailCalled = true), HttpResponse.error())));
     mockShows([PARTIAL_SHOW]);
-    server.use(
-      http.get(`${API_URL}/shows/${PARTIAL_SHOW.id}`, () =>
-        HttpResponse.json({
-          id: PARTIAL_SHOW.id,
-          title: PARTIAL_SHOW.title,
-          poster_path: PARTIAL_SHOW.poster_path,
-          seasons: [
-            {
-              season_number: 1,
-              watch_state: "partial",
-              episodes: [
-                { id: "e1", episode_number: 1, runtime_minutes: 45, watched: true },
-                { id: "e2", episode_number: 2, runtime_minutes: 45, watched: false },
-                { id: "e3", episode_number: 3, runtime_minutes: 45, watched: false },
-                { id: "e4", episode_number: 4, runtime_minutes: 45, watched: false },
-              ],
-            },
-          ],
-        }),
-      ),
-    );
     renderApp(<PosterGrid />);
 
     const tile = await screen.findByTestId("poster-tile");
@@ -99,6 +117,7 @@ describe("PosterGrid", () => {
     const bar = tile.querySelector("div > div") as HTMLElement;
     expect(bar).toHaveStyle({ width: "25%" });
     expect(percent).toBeInTheDocument();
+    expect(detailCalled).toBe(false);
   });
 
   it("renders a Not-started show dimmed, restoring on hover", async () => {
@@ -118,6 +137,19 @@ describe("PosterGrid", () => {
     await screen.findByText(/nothing here yet/i);
     expect(screen.queryByRole("list", { name: "Shows" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ Log watching" })).toBeInTheDocument();
+  });
+
+  it("animates the empty state in and gives its primary CTA the brand accent, motion-reduce-aware", async () => {
+    mockShows([]);
+    renderApp(<PosterGrid />);
+
+    const heading = await screen.findByText(/nothing here yet/i);
+    const card = heading.parentElement as HTMLElement;
+    expect(card).toHaveClass("animate-empty-in");
+    expect(card).toHaveClass("motion-reduce:animate-none");
+
+    const cta = screen.getByRole("button", { name: "+ Log watching" });
+    expect(cta).toHaveClass("bg-brand");
   });
 
   it("opens the Spotlight palette when + Log watching is clicked", async () => {
@@ -224,7 +256,7 @@ describe("PosterGrid", () => {
     expect(skeletons).toHaveLength(2);
     expect(screen.queryByText(/nothing here yet/i)).not.toBeInTheDocument();
     skeletons.forEach((skeleton) => {
-      expect(skeleton).toHaveClass("animate-shimmer");
+      expect(skeleton).toHaveClass("animate-pulse");
       expect(skeleton).toHaveClass("motion-reduce:animate-none");
     });
 
@@ -295,5 +327,58 @@ describe("PosterGrid", () => {
 
     await screen.findByText(/nothing here yet/i);
     expect(screen.queryByTestId("poster-tile")).not.toBeInTheDocument();
+  });
+
+  it("calls onShowsChanged after an empty-state example add and after a modal-driven change, so a caller can refresh Watch Time", async () => {
+    mockShows([]);
+    server.use(http.post(`${API_URL}/shows`, () => HttpResponse.json(FULL_SHOW)));
+    const onShowsChanged = vi.fn();
+    const user = userEvent.setup();
+    renderApp(<PosterGrid onShowsChanged={onShowsChanged} />);
+
+    await screen.findByText(/nothing here yet/i);
+    await user.click(screen.getByRole("button", { name: "Breaking Bad" }));
+    await screen.findByTestId("poster-tile");
+    expect(onShowsChanged).toHaveBeenCalledOnce();
+
+    server.use(
+      http.get(`${API_URL}/shows/${FULL_SHOW.id}`, () =>
+        HttpResponse.json({
+          id: FULL_SHOW.id,
+          title: FULL_SHOW.title,
+          poster_path: FULL_SHOW.poster_path,
+          seasons: [
+            {
+              season_number: 1,
+              watch_state: "full",
+              episodes: [{ id: "e1", episode_number: 1, runtime_minutes: 45, watched: true }],
+            },
+          ],
+        }),
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: `Open ${FULL_SHOW.title}` }));
+    await screen.findByText("Season 1");
+    await user.click(screen.getByText("Season 1"));
+    const checkbox = screen.getByLabelText("Season 1 episode 1");
+    server.use(
+      http.put(`${API_URL}/shows/${FULL_SHOW.id}/episodes/e1`, () =>
+        HttpResponse.json({
+          id: FULL_SHOW.id,
+          title: FULL_SHOW.title,
+          poster_path: FULL_SHOW.poster_path,
+          seasons: [
+            {
+              season_number: 1,
+              watch_state: "none",
+              episodes: [{ id: "e1", episode_number: 1, runtime_minutes: 45, watched: false }],
+            },
+          ],
+        }),
+      ),
+    );
+    await user.click(checkbox);
+
+    await waitFor(() => expect(onShowsChanged).toHaveBeenCalledTimes(2));
   });
 });

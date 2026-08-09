@@ -175,6 +175,14 @@ describe("SpotlightPalette", () => {
     expect(screen.queryByText(/try one of these/i)).not.toBeInTheDocument();
   });
 
+  it("groups the examples under 'one show' vs. 'multiple' labels, not three identical rows", async () => {
+    mockSearch([]);
+    renderApp(<SpotlightPalette open onClose={vi.fn()} />);
+
+    expect(screen.getByText("One show at a time")).toBeInTheDocument();
+    expect(screen.getByText("Multiple, in one line")).toBeInTheDocument();
+  });
+
   it("clicking a helper example fills the input with its literal text", async () => {
     mockSearch([]);
     const user = userEvent.setup();
@@ -255,6 +263,16 @@ describe("SpotlightPalette — NLP mode + parse choreography (#12)", () => {
 
     await user.clear(input);
     await user.type(input, "friends, the office 2 seasons");
+    expect(await screen.findByRole("button", { name: "Add 2 shows" })).toBeInTheDocument();
+  });
+
+  it('counts "Rick and Morty" as one show, not two, even though its own title contains "and"', async () => {
+    mockSearch([]);
+    const user = userEvent.setup();
+    renderApp(<SpotlightPalette open onClose={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: /search for a show/i });
+
+    await user.type(input, "rick and morty, got");
     expect(await screen.findByRole("button", { name: "Add 2 shows" })).toBeInTheDocument();
   });
 

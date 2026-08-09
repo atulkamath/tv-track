@@ -31,7 +31,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-scrim data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 z-50 bg-black/50 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -39,11 +39,10 @@ function DialogOverlay({
   )
 }
 
-// docs/design.md: "Show detail = centered modal (max 640px, 84vh)" — the one
-// modal skin this whole app uses, so it's baked in here rather than
-// overridden per call site. No default padding/close button: every decided
-// modal pattern (show detail, Disambiguation Step) draws its own header and
-// close affordance, per docs/design.md.
+// The one modal skin this whole app uses (max 640px, 84vh), so it's baked in
+// here rather than overridden per call site. No default padding/close
+// button: every modal (show detail, Disambiguation Step, Spotlight palette)
+// draws its own header and close affordance.
 function DialogContent({
   className,
   children,
@@ -58,7 +57,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 max-h-[84vh] w-full max-w-[min(640px,calc(100%-3rem))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-lg bg-surface text-foreground shadow-modal outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 max-h-[84vh] w-full max-w-[min(640px,calc(100%-3rem))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-lg bg-popover text-popover-foreground shadow-lg outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}

@@ -9,60 +9,42 @@
    setting. */
 @custom-variant dark (&:is(.dark *));
 
-/* Design tokens — sourced verbatim from docs/design.md. Don't introduce new
-   colors, fonts, or spacing values without updating that doc first.
-   Spacing (4/8/12/16/24/32) needs no custom tokens: Tailwind's default
-   p-1/2/3/4/6/8 etc. are already exact multiples of 4px. */
+/* shadcn's stock "neutral" dark theme (components.json: baseColor "neutral"),
+   unmodified — no custom brand colors, no gradients. Full/Partial Watch
+   State still get real Tailwind palette colors (green-500/amber-500) at
+   their call sites, since those need to be visually distinct at a glance;
+   everything else is exactly what `shadcn init` generates. */
 :root {
-  /* Color */
-  --bg: linear-gradient(175deg, #181310 0%, #100d0b 55%, #0a0908 100%);
-  --surface: linear-gradient(160deg, #241f1b, #1a1613);
-  --surface-2: #2b2521;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-soft: rgba(255, 255, 255, 0.045);
-  --ink: #f3eee8;
-  --ink-muted: rgba(243, 238, 232, 0.5);
-  --muted-lo: rgba(243, 238, 232, 0.4);
-  --muted-hi: rgba(243, 238, 232, 0.62);
-  --brand: linear-gradient(135deg, #e8434f, #c81c28);
-  --accent-solid: #c81c28;
-  --full: #3ebe6b;
-  --partial: #e0a83e;
-  --scrim: rgba(0, 0, 0, 0.72);
-  --gold: #f5c445;
-  --silver: #c9cfd9;
-  --bronze: #d08a4e;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --radius: 0.625rem;
 
-  /* shadcn semantic slots, reskinned to the palette above — solid colors
-     only, since these back component backgrounds/borders and can't take a
-     gradient. Solid fallbacks match the ones already agreed for Clerk's
-     appearance API. Defined in full: components/ui/button.tsx and
-     components/ui/dialog.tsx (DialogFooter, DialogDescription) reference
-     nearly all of these slots directly, so a partial set leaves some
-     variant silently unstyled rather than actually unused. */
-  --background: #0a0908;
-  --foreground: var(--ink);
-  --card: #1a1613;
-  --card-foreground: var(--ink);
-  --popover: #1a1613;
-  --popover-foreground: var(--ink);
-  --primary: var(--accent-solid);
-  --primary-foreground: #fff;
-  --secondary: var(--surface-2);
-  --secondary-foreground: var(--ink);
-  --muted: var(--surface-2);
-  --muted-foreground: var(--ink-muted);
-  --accent: var(--surface-2);
-  --accent-foreground: var(--ink);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: var(--line);
-  --input: var(--line);
-  --ring: var(--accent-solid);
-  --radius: 12px;
+  /* Home's one deliberate brand color (Netflix aesthetic redesign) — the
+   * actual Netflix red, used sparingly: the Partial progress bar, poster
+   * hover state, and the "Log watching" CTA. Kept entirely separate from
+   * --destructive (still just delete/error) so the two meanings never blur.
+   */
+  --brand: #e50914;
+  --brand-foreground: #ffffff;
 }
 
-/* Single theme by design — light theme was a rejected direction (docs/design.md).
-   No .dark override block: this app never toggles a .dark class, so the
+/* Single theme by design — this app never toggles a .dark class, so the
    palette above is the only theme, applied unconditionally via :root. */
 html {
   color-scheme: dark;
@@ -77,8 +59,8 @@ body {
 
 body {
   min-height: 100%;
-  background: var(--bg);
-  color: var(--ink);
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-figtree), -apple-system, "Segoe UI", sans-serif;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
@@ -99,12 +81,12 @@ a {
 }
 
 ::selection {
-  background: var(--accent-solid);
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent-solid);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -131,74 +113,59 @@ a {
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --color-scrim: var(--scrim);
-
-  /* Leaderboard podium numerals only (docs/design.md) — solid colors, same
-     treatment as --scrim above: promoted so `text-gold`/`text-silver`/
-     `text-bronze` exist as utilities, not turned into shadcn semantic slots
-     since nothing else in the palette uses them. */
-  --color-gold: var(--gold);
-  --color-silver: var(--silver);
-  --color-bronze: var(--bronze);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
 }
 
-/* Depth — soft, multi-layer shadow + a 1px inner highlight, not a hard
-   border (docs/design.md). --shadow-modal duplicates the two literal values
-   instead of combining them via var() so both layers land in one
-   box-shadow declaration; two separate shadow-* utility classes would just
-   have the later one win, since box-shadow isn't additive across classes. */
+/* Parse choreography (#12): the shimmer skeleton is the stock shadcn
+   `Skeleton` component now (components/ui/skeleton.tsx, `animate-pulse`,
+   Tailwind's own built-in keyframe) — nothing custom to declare here for
+   it. Landed cards still pop with a brief glow (1.4s); tiles and the
+   empty-state card get a settle-in entrance. Declared as Tailwind v4 theme
+   animations so components reach for plain `animate-*` classes and the
+   prefers-reduced-motion opt-out stays a Tailwind `motion-reduce:animate-none`
+   variant, matching how PosterTile's hover transition already opts out via
+   `motion-reduce:[transition:none]`, rather than a JS matchMedia check —
+   this app has no animation library and no reason to add one for effects
+   plain CSS already covers. */
 @theme {
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4);
-  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --shadow-modal:
-    0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-/* --bg and --surface are gradients, not colors — Tailwind's bg-* utilities
-   assume background-color, so they need their own utility rather than a
-   --color-* theme entry. */
-@utility bg-surface {
-  background: var(--surface);
-}
-
-/* Parse choreography (#12, docs/design.md: "dots-pill + shimmer skeleton
-   cards where shows will land; landed cards pop with a brief accent glow
-   (1.4s)"). Declared as Tailwind v4 theme animations — same pattern as the
-   --shadow-* tokens above — so components reach for plain `animate-shimmer`
-   / `animate-glow-pop` classes and the prefers-reduced-motion opt-out stays
-   a Tailwind `motion-reduce:animate-none` variant, matching how PosterTile's
-   hover transition already opts out via `motion-reduce:[transition:none]`,
-   rather than a JS matchMedia check. */
-@theme {
-  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
   --animate-glow-pop: glow-pop 1.4s ease-out;
-}
-
-@keyframes shimmer {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
+  --animate-tile-in: tile-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-empty-in: empty-in 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes glow-pop {
   0% {
-    box-shadow: 0 0 0 0 rgba(200, 28, 40, 0);
+    box-shadow: 0 0 0 0 oklch(1 0 0 / 0);
   }
   30% {
     box-shadow:
-      0 0 0 3px rgba(232, 67, 79, 0.65),
-      0 0 22px 6px rgba(200, 28, 40, 0.55);
+      0 0 0 3px oklch(1 0 0 / 0.5),
+      0 0 22px 6px oklch(1 0 0 / 0.35);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(200, 28, 40, 0);
+    box-shadow: 0 0 0 0 oklch(1 0 0 / 0);
+  }
+}
+
+@keyframes tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes empty-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

@@ -4,44 +4,46 @@ import type { ClerkProvider } from "@clerk/nextjs";
 type ClerkAppearance = NonNullable<ComponentProps<typeof ClerkProvider>["appearance"]>;
 
 /**
- * Themes Clerk's prebuilt `<SignIn/>`/`<SignUp/>` to this app's tokens
- * (docs/design.md → "Entry, auth, empty, and error surfaces"). Set once on
- * `<ClerkProvider>` in the root layout, so every Clerk component inherits it —
- * no per-component appearance props, no custom auth forms.
+ * Themes Clerk's prebuilt `<SignIn/>`/`<SignUp/>` to this app's tokens. Set
+ * once on `<ClerkProvider>` in the root layout, so every Clerk component
+ * inherits it — no per-component appearance props, no custom auth forms.
  *
- * Clerk's appearance API takes flat CSS colors, not gradients, so the two
- * gradient tokens (`--bg`, `--accent`) fall back to their solid anchor colors
- * from docs/design.md rather than being approximated:
- *   - `--bg`      → `#0a0908` (the page around the card — set in each auth
- *                    route's own CSS, not here; Clerk only themes the card)
- *   - `--surface` → `#1a1613` (`colorBackground`, the card itself)
- *   - `--accent`  → `#c81c28` (`colorPrimary`, the primary button)
+ * Clerk's appearance API takes flat CSS colors, not `var()` references, so
+ * these are literal hex equivalents of `globals.css`'s shadcn stock
+ * dark-neutral theme (Tailwind's own neutral scale) rather than the CSS
+ * variables directly:
+ *   - `--background` (oklch(0.145 0 0)) → neutral-950 `#0a0a0a`
+ *   - `--card`       (oklch(0.205 0 0)) → neutral-900 `#171717`
+ *   - `--input`                          → neutral-800 `#262626`
+ *   - `--foreground` (oklch(0.985 0 0)) → neutral-50  `#fafafa`
+ *   - `--primary`    (oklch(0.922 0 0)) → neutral-200 `#e5e5e5`
+ *   - `--muted-foreground` (oklch(0.708 0 0)) → neutral-400 `#a3a3a3`
  */
 export const clerkAppearance: ClerkAppearance = {
   variables: {
-    colorPrimary: "#c81c28",
-    colorPrimaryForeground: "#f3eee8",
-    colorBackground: "#1a1613",
-    colorInput: "#2b2521",
-    colorInputForeground: "#f3eee8",
-    colorForeground: "#f3eee8",
-    colorMutedForeground: "rgba(243, 238, 232, 0.5)",
-    colorNeutral: "#f3eee8",
-    colorBorder: "rgba(255, 255, 255, 0.07)",
+    colorPrimary: "#e5e5e5",
+    colorPrimaryForeground: "#171717",
+    colorBackground: "#171717",
+    colorInput: "#262626",
+    colorInputForeground: "#fafafa",
+    colorForeground: "#fafafa",
+    colorMutedForeground: "#a3a3a3",
+    colorNeutral: "#fafafa",
+    colorBorder: "rgba(255, 255, 255, 0.1)",
     colorShadow: "rgba(0, 0, 0, 0.5)",
     fontFamily: "var(--font-figtree), -apple-system, 'Segoe UI', sans-serif",
-    borderRadius: "16px",
+    borderRadius: "0.625rem",
   },
   elements: {
     card: {
       boxShadow: "0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 24px rgba(0, 0, 0, 0.4)",
     },
     formButtonPrimary: {
-      backgroundColor: "#c81c28",
-      color: "#ffffff",
+      backgroundColor: "#e5e5e5",
+      color: "#171717",
     },
     footerActionLink: {
-      color: "#c81c28",
+      color: "#e5e5e5",
     },
   },
 };

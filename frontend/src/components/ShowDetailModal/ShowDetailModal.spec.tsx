@@ -79,6 +79,20 @@ describe("ShowDetailModal", () => {
     expect(season2.getByLabelText("Season 2 episode 1")).toBeInTheDocument();
   });
 
+  it("rotates the season row's chevron to signal expand/collapse", async () => {
+    mockDetail();
+    const user = userEvent.setup();
+    renderApp(<ShowDetailModal showId={SHOW_ID} open onClose={vi.fn()} />);
+    await screen.findByRole("heading", { name: "Breaking Bad" });
+
+    const toggle = within(screen.getByTestId("season-row-1")).getByRole("button", { expanded: false });
+    const chevron = toggle.querySelector("svg") as SVGElement;
+    expect(chevron).not.toHaveClass("rotate-90");
+
+    await user.click(toggle);
+    expect(chevron).toHaveClass("rotate-90");
+  });
+
   it("ticking an unwatched episode calls PUT with { watched: true } and checks the box", async () => {
     mockDetail();
     let receivedBody: unknown;
@@ -160,6 +174,33 @@ describe("ShowDetailModal", () => {
 
     await screen.findByText("3 of 3 watched");
     expect(seasonsHit.sort()).toEqual([1, 2]);
+    // One context-sensitive button, not two — it flips label once full.
+    expect(header.getByRole("button", { name: "Unmark all" })).toBeInTheDocument();
+    expect(header.queryByRole("button", { name: "Mark all watched" })).not.toBeInTheDocument();
+  });
+
+  it("shows a Watch State color dot per season, matching the poster grid's own green/brand/neutral language", async () => {
+    mockDetail();
+    renderApp(<ShowDetailModal showId={SHOW_ID} open onClose={vi.fn()} />);
+    await screen.findByRole("heading", { name: "Breaking Bad" });
+
+    const season1 = within(screen.getByTestId("season-row-1"));
+    const season2 = within(screen.getByTestId("season-row-2"));
+    expect(season1.getByText("Season 1").previousElementSibling).toHaveClass("bg-brand");
+    expect(season2.getByText("Season 2").previousElementSibling).toHaveClass("bg-muted-foreground/40");
+  });
+
+  it("closes via the corner close button, positioned outside the header row", async () => {
+    mockDetail();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderApp(<ShowDetailModal showId={SHOW_ID} open onClose={onClose} />);
+    await screen.findByRole("heading", { name: "Breaking Bad" });
+
+    const closeButton = screen.getByRole("button", { name: "Close" });
+    expect(within(screen.getByTestId("show-header")).queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    await user.click(closeButton);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("states the consequence and calls DELETE on confirming", async () => {

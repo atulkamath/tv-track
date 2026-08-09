@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { clerkAppearance } from "./clerk-appearance";
 
 describe("clerkAppearance", () => {
-  it("themes the primary color to the accent solid fallback, not the gradient", () => {
-    expect(clerkAppearance.variables?.colorPrimary).toBe("#c81c28");
+  it("themes the primary color to the stock shadcn dark-neutral primary", () => {
+    expect(clerkAppearance.variables?.colorPrimary).toBe("#e5e5e5");
   });
 
-  it("themes the card background to the surface solid fallback, not the gradient", () => {
-    expect(clerkAppearance.variables?.colorBackground).toBe("#1a1613");
+  it("themes the card background to the stock shadcn dark-neutral card color", () => {
+    expect(clerkAppearance.variables?.colorBackground).toBe("#171717");
   });
 
   it("never hands Clerk a gradient — every variable is a flat color or string value", () => {
@@ -22,7 +22,7 @@ describe("clerkAppearance", () => {
     expect(clerkAppearance.variables?.fontFamily).toMatch(/figtree/i);
   });
 
-  it("uses the modal radius for the auth card, per docs/design.md", () => {
-    expect(clerkAppearance.variables?.borderRadius).toBe("16px");
+  it("uses the app's stock shadcn radius for the auth card", () => {
+    expect(clerkAppearance.variables?.borderRadius).toBe("0.625rem");
   });
 });

@@ -59,12 +59,12 @@ describe("Leaderboard", () => {
     ]);
 
     const [first, second, third, fourth] = screen.getAllByText(/^[1-4]$/);
-    expect(first).toHaveClass("text-gold");
-    expect(second).toHaveClass("text-silver");
-    expect(third).toHaveClass("text-bronze");
-    expect(fourth).not.toHaveClass("text-gold");
-    expect(fourth).not.toHaveClass("text-silver");
-    expect(fourth).not.toHaveClass("text-bronze");
+    expect(first).toHaveClass("text-yellow-500");
+    expect(second).toHaveClass("text-zinc-400");
+    expect(third).toHaveClass("text-amber-700");
+    expect(fourth).not.toHaveClass("text-yellow-500");
+    expect(fourth).not.toHaveClass("text-zinc-400");
+    expect(fourth).not.toHaveClass("text-amber-700");
   });
 
   it("makes only the caller's row visually distinct, via outline, tint, and a YOU chip", async () => {

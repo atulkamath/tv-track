@@ -14,18 +14,16 @@ const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 /** Debounce window for search-as-you-type, per the ticket (#8). */
 const SEARCH_DEBOUNCE_MS = 300;
 
-/**
- * The three canonical examples from docs/design.md's "Try one of these"
- * helper — one plain single-title search (unaffected by #12) and two NLP
- * commands, each with a short caption explaining what typing it does. These
- * are literal commands now, not just search seeds: clicking one fills the
- * input with `text` verbatim, and typing/pasting them verbatim is exactly
- * what `isNlpMode`/`estimateMentionCount` below are verified against.
- */
-const HELPER_EXAMPLES: { text: string; caption: string }[] = [
-  { text: "simpsons", caption: "Searches as you type, add one show" },
-  { text: "breaking bad 3 seasons", caption: "Adds the show, marks seasons 1–3 watched" },
-  { text: "friends, the office 2 seasons", caption: "Adds two shows in one line" },
+/** Grouped so the two modes (one show vs. several) read as a choice, not three identical rows. Clicking fills the input verbatim. */
+const HELPER_GROUPS: { label: string; examples: { text: string; caption: string }[] }[] = [
+  { label: "One show at a time", examples: [{ text: "simpsons", caption: "Searches as you type, then Add" }] },
+  {
+    label: "Multiple, in one line",
+    examples: [
+      { text: "breaking bad 3 seasons", caption: "Marks seasons 1–3 watched" },
+      { text: "friends, the office 2 seasons", caption: "Adds both at once" },
+    ],
+  },
 ];
 
 /**
@@ -42,15 +40,13 @@ function isNlpMode(text: string): boolean {
   return NLP_MODE_PATTERN.test(text);
 }
 
-/**
- * A client-side estimate of how many shows a parse will resolve, for the
- * "Add N shows" CTA label only — it doesn't need to be authoritative (the
- * real mention count comes back from `POST /shows/parse`), just right for
- * docs/design.md's canonical examples: "breaking bad 3 seasons" → 1,
- * "friends, the office 2 seasons" → 2.
- */
+/** Titles whose own "and" must survive the split below — mirrors PARSE_SYSTEM_PROMPT's own examples on the backend. */
+const AND_TITLES = [/rick\s+and\s+morty/gi, /law\s+and\s+order/gi, /will\s+and\s+grace/gi];
+
+/** A client-side estimate for the CTA label and skeleton count — not authoritative, the real count comes back from `POST /shows/parse`. */
 function estimateMentionCount(text: string): number {
-  return text
+  const masked = AND_TITLES.reduce((acc, pattern) => acc.replace(pattern, (m) => m.replace(/\s+and\s+/i, " & ")), text);
+  return masked
     .split(/,| and /i)
     .map((part) => part.trim())
     .filter(Boolean).length;
@@ -352,7 +348,7 @@ export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onP
           onKeyDown={handleKeyDown}
           placeholder="Log watching…"
           aria-label="Search for a show"
-          className="h-11 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="h-11 rounded-md border border-border bg-input/30 px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
 
         {errorMessage && (
@@ -404,23 +400,28 @@ export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onP
 
 function HelperExamples({ onPick }: { onPick: (text: string) => void }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">Try one of these</p>
-      <ul className="flex flex-col gap-1">
-        {HELPER_EXAMPLES.map((example) => (
-          <li key={example.text}>
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-auto w-full flex-col items-start gap-0.5 py-2"
-              onClick={() => onPick(example.text)}
-            >
-              <span>{example.text}</span>
-              <span className="text-xs font-normal text-muted-foreground">{example.caption}</span>
-            </Button>
-          </li>
-        ))}
-      </ul>
+      {HELPER_GROUPS.map((group) => (
+        <div key={group.label} className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{group.label}</p>
+          <ul className="flex flex-col gap-1">
+            {group.examples.map((example) => (
+              <li key={example.text}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-auto w-full flex-col items-start gap-0.5 py-2"
+                  onClick={() => onPick(example.text)}
+                >
+                  <span>{example.text}</span>
+                  <span className="text-xs font-normal text-muted-foreground">{example.caption}</span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }
@@ -437,20 +438,20 @@ function DotsPill() {
   return (
     <div
       role="status"
-      className="flex w-fit items-center gap-1.5 rounded-full bg-[var(--surface-2)] px-3 py-2"
+      className="flex w-fit items-center gap-1.5 rounded-full bg-muted px-3 py-2"
     >
       <span className="sr-only">Parsing…</span>
       <span
         aria-hidden="true"
-        className="size-1.5 animate-bounce rounded-full bg-[var(--ink-muted)] motion-reduce:animate-none [animation-delay:-0.3s]"
+        className="size-1.5 animate-bounce rounded-full bg-muted-foreground motion-reduce:animate-none [animation-delay:-0.3s]"
       />
       <span
         aria-hidden="true"
-        className="size-1.5 animate-bounce rounded-full bg-[var(--ink-muted)] motion-reduce:animate-none [animation-delay:-0.15s]"
+        className="size-1.5 animate-bounce rounded-full bg-muted-foreground motion-reduce:animate-none [animation-delay:-0.15s]"
       />
       <span
         aria-hidden="true"
-        className="size-1.5 animate-bounce rounded-full bg-[var(--ink-muted)] motion-reduce:animate-none"
+        className="size-1.5 animate-bounce rounded-full bg-muted-foreground motion-reduce:animate-none"
       />
     </div>
   );
@@ -464,7 +465,7 @@ function DotsPill() {
  */
 function UnmatchedStrip() {
   return (
-    <p role="alert" className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] p-3 text-sm text-muted-foreground">
+    <p role="alert" className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
       Couldn&apos;t match that. Check the spelling, or try &quot;show name 3 seasons&quot;.
     </p>
   );
@@ -499,7 +500,7 @@ function SuggestionRow({
         {result.year !== null && <span className="text-xs text-muted-foreground">{result.year}</span>}
       </div>
       {added ? (
-        <span className="shrink-0 rounded-full bg-[var(--full)] px-2 py-0.5 text-[11px] font-bold text-white">
+        <span className="shrink-0 rounded-full bg-green-500 px-2 py-0.5 text-[11px] font-bold text-white">
           ✓ added
         </span>
       ) : (

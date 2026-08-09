@@ -15,3 +15,7 @@ Default five-label vocabulary (needs-triage, needs-info, ready-for-agent, ready-
 ### Domain docs
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Code style
+
+Comments: 1–2 lines max, everywhere in this app. If a "why" needs more than that, it belongs in a commit message, an ADR, or a linked doc — not a comment block. Applies going forward; existing longer comments aren't being retroactively rewritten just for length.

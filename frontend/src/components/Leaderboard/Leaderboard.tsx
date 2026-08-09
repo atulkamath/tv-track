@@ -30,7 +30,8 @@ type LoadState =
   | { status: "error" }
   | { status: "ready"; entries: LeaderboardEntry[] };
 
-const PODIUM_CLASSES = ["text-gold", "text-silver", "text-bronze"] as const;
+/** Stock Tailwind palette colors for the top 3 ranks — no custom hex. */
+const PODIUM_CLASSES = ["text-yellow-500", "text-zinc-400", "text-amber-700"] as const;
 
 /** The backend's wire shape (snake_case) for one row — see `backend/src/leaderboard/leaderboard.dto.ts`. */
 interface LeaderboardEntryResponse {
@@ -53,10 +54,9 @@ function toLeaderboardEntry(entry: LeaderboardEntryResponse): LeaderboardEntry {
 }
 
 /**
- * Leaderboard = plain ranked list (docs/design.md, max 560px): rank numeral
- * (podium colors top 3), avatar, name, one big right-aligned time. The
- * caller's own row is the only loud element — accent outline, dark red
- * tint, red YOU chip.
+ * Leaderboard = plain ranked list (max 560px): rank numeral (podium colors
+ * top 3), avatar, name, one big right-aligned time. The caller's own row is
+ * the only loud element — accent outline, tinted background, a YOU chip.
  *
  * Owns its `GET /leaderboard` fetch rather than taking data as a prop —
  * frontend tests fake the network via MSW (see Leaderboard.spec.tsx) rather
@@ -142,7 +142,7 @@ function LeaderboardRow({ rank, entry }: { rank: number; entry: LeaderboardEntry
         "flex items-center gap-3 rounded-md px-3 py-2",
         entry.isSelf
           ? "border border-primary bg-primary/10"
-          : "border-b border-[var(--line-soft)] last:border-b-0",
+          : "border-b border-border/50 last:border-b-0",
       )}
     >
       <span
