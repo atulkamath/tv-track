@@ -139,13 +139,6 @@ export function PosterGrid({
   // delete) can re-invoke it too, keeping the grid from going stale without
   // hand-rolling a partial local-state patch.
   const loadShows = useCallback(async () => {
-    // Temporary dev-only override to preview the empty state without touching the real DB — remove once QA on it is done.
-    if (process.env.NEXT_PUBLIC_MOCK_EMPTY === "1") {
-      setState({ status: "ready", shows: [] });
-      onShowsLoaded?.();
-      return;
-    }
-
     const token = await getToken();
     if (!token) {
       onShowsLoaded?.();
