@@ -212,6 +212,14 @@ describe('POST /shows, GET /shows, GET /shows/:id, GET /me/watch-time', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
     expect(card.body[0].watch_state).toBe('partial');
+    // #19: watched_count/episode_count let the poster wall compute this
+    // show's exact percentage from this one response, no follow-up
+    // GET /shows/:id needed.
+    // Only season 1 was ever watched (the `seasons: [1]` filter excludes
+    // season 2 entirely), and one of its two episodes was just unmarked —
+    // one watched episode out of four total.
+    expect(card.body[0].watched_count).toBe(1);
+    expect(card.body[0].episode_count).toBe(4);
   });
 
   it("does not show another user's watched episodes as your own", async () => {

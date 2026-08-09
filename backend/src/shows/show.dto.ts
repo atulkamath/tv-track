@@ -28,25 +28,40 @@ export interface ShowTree {
   seasons: SeasonTree[];
 }
 
-function watchStateFromEpisodes(episodes: EpisodeTree[]): WatchState {
-  const watched = episodes.filter((episode) => episode.watchedBy.length > 0).length;
-  return deriveWatchState(watched, episodes.length);
+function countWatched(episodes: EpisodeTree[]): number {
+  return episodes.filter((episode) => episode.watchedBy.length > 0).length;
 }
 
-/** The wire shape of one card in `GET /shows`. Snake-case, matching the rest of the API. */
+function watchStateFromEpisodes(episodes: EpisodeTree[]): WatchState {
+  return deriveWatchState(countWatched(episodes), episodes.length);
+}
+
+/**
+ * The wire shape of one card in `GET /shows`. Snake-case, matching the rest
+ * of the API. `watched_count`/`episode_count` let the poster wall compute an
+ * exact Partial percentage from this response alone — see #19: before these
+ * two fields existed, a Partial card required a follow-up `GET /shows/:id`
+ * per show just to count episodes, an N+1 the wall paid on every load.
+ */
 export interface ShowCardDto {
   id: string;
   title: string;
   poster_path: string | null;
   watch_state: WatchState;
+  watched_count: number;
+  episode_count: number;
 }
 
 export function toShowCardDto(show: ShowTree): ShowCardDto {
+  const episodes = show.seasons.flatMap((season) => season.episodes);
+  const watchedCount = countWatched(episodes);
   return {
     id: show.id,
     title: show.title,
     poster_path: show.posterPath,
-    watch_state: watchStateFromEpisodes(show.seasons.flatMap((season) => season.episodes)),
+    watch_state: deriveWatchState(watchedCount, episodes.length),
+    watched_count: watchedCount,
+    episode_count: episodes.length,
   };
 }
 

@@ -134,7 +134,14 @@ describe('POST /shows/parse', () => {
     expect(response.body.ambiguous).toEqual([]);
     expect(response.body.unmatched).toEqual([]);
     expect(response.body.resolved).toEqual([
-      { id: expect.any(String), title: 'Breaking Bad', poster_path: '/bb.jpg', watch_state: 'full' },
+      {
+        id: expect.any(String),
+        title: 'Breaking Bad',
+        poster_path: '/bb.jpg',
+        watch_state: 'full',
+        watched_count: 3,
+        episode_count: 3,
+      },
     ]);
   });
 
