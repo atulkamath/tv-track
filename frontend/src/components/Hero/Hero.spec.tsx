@@ -18,7 +18,7 @@ describe("Hero", () => {
   it("previews a minimal inline Leaderboard with the viewer winning, not a generic mock-up", () => {
     const { container } = renderApp(<Hero />);
     expect(screen.getByText("You")).toBeInTheDocument();
-    expect(screen.getByText("Sam")).toBeInTheDocument();
+    expect(screen.getByText("Moss")).toBeInTheDocument();
     // The preview is aria-hidden (decorative) — query the DOM directly. "You" is chip 1 with the highest Watch Time: the hook is winning, not just participating.
     const chips = container.querySelectorAll("ol li");
     expect(chips).toHaveLength(4);

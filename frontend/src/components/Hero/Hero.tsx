@@ -10,9 +10,9 @@ const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 /** Minimal sample data — you + 3 friends, inline. "You" always wins, since this is selling the competitive hook. */
 const PREVIEW_ENTRIES: { name: string; minutes: number; isSelf: boolean }[] = [
   { name: "You", minutes: 4700, isSelf: true },
-  { name: "Sam", minutes: 3120, isSelf: false },
-  { name: "Priya", minutes: 2460, isSelf: false },
-  { name: "Jordan", minutes: 1980, isSelf: false },
+  { name: "Moss", minutes: 3120, isSelf: false },
+  { name: "Roy", minutes: 2460, isSelf: false },
+  { name: "Jen", minutes: 1980, isSelf: false },
 ];
 
 function PreviewLeaderboardEntry({ rank, name, minutes, isSelf }: { rank: number; name: string; minutes: number; isSelf: boolean }) {
