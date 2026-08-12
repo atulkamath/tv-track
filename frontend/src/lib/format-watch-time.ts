@@ -5,10 +5,10 @@
  * that. Minutes are dropped once days are shown — the two units together
  * are already enough precision for a leaderboard.
  *
- * Past 30 days it rolls up again to `3mo+`: at that scale the trailing days
- * are noise, and the `+` says "at least this much" rather than implying a
- * precision 30-day months don't have. Exactly 30 days is `1mo` — no `+`,
- * since there is no remainder to stand for.
+ * Past 30 days it adds a months unit and stays exact — `4mo 1d 1h`, with the
+ * leftover days and hours spelled out rather than rounded away, and empty
+ * units dropped (`4mo 1h`, `1mo`). Months are a flat 30 days; calendar months
+ * would make the same total read differently depending on when it accrued.
  */
 export function formatWatchTime(totalMinutes: number): string {
   const minutes = Math.max(0, Math.round(totalMinutes));
@@ -16,8 +16,12 @@ export function formatWatchTime(totalMinutes: number): string {
   const months = Math.floor(days / 30);
 
   if (months > 0) {
-    const exact = minutes === months * 30 * 24 * 60;
-    return exact ? `${months}mo` : `${months}mo+`;
+    const remainingDays = days % 30;
+    const hours = Math.floor((minutes % (24 * 60)) / 60);
+    const parts = [`${months}mo`];
+    if (remainingDays > 0) parts.push(`${remainingDays}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    return parts.join(" ");
   }
 
   if (days > 0) {

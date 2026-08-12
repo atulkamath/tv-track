@@ -26,14 +26,14 @@ describe("formatWatchTime", () => {
     expect(formatWatchTime(29 * 24 * 60 + 23 * 60)).toBe("29d 23h");
   });
 
-  it("shows exactly 30 days as a clean 1mo — no + when there is no remainder", () => {
-    expect(formatWatchTime(30 * 24 * 60)).toBe("1mo");
-    expect(formatWatchTime(90 * 24 * 60)).toBe("3mo");
+  it("adds a months unit at 30 days, keeping the leftover days and hours exact", () => {
+    expect(formatWatchTime((4 * 30 + 1) * 24 * 60 + 60)).toBe("4mo 1d 1h");
   });
 
-  it("adds the + only once past a whole month", () => {
-    expect(formatWatchTime(30 * 24 * 60 + 1)).toBe("1mo+");
-    expect(formatWatchTime(89 * 24 * 60)).toBe("2mo+");
+  it("drops empty units rather than padding them with zeros", () => {
+    expect(formatWatchTime(30 * 24 * 60)).toBe("1mo");
+    expect(formatWatchTime(89 * 24 * 60)).toBe("2mo 29d");
+    expect(formatWatchTime(4 * 30 * 24 * 60 + 60)).toBe("4mo 1h");
   });
 
   it("rounds fractional minutes", () => {
