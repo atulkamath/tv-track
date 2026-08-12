@@ -10,7 +10,7 @@ import { PosterGrid } from "@/components/PosterGrid/PosterGrid";
 import { Leaderboard } from "@/components/Leaderboard/Leaderboard";
 import { Settings } from "@/components/Settings/Settings";
 import { SpotlightPalette, type AmbiguousMentionWire } from "@/components/SpotlightPalette/SpotlightPalette";
-import { WatchTimeStat } from "@/components/WatchTimeStat/WatchTimeStat";
+import { WatchTimeDisplay, useWatchTime } from "@/components/WatchTimeStat/WatchTimeStat";
 import { Button } from "@/components/ui/button";
 
 /** The NestJS backend this frontend calls cross-origin (ADR 0004). */
@@ -67,6 +67,9 @@ export function Home() {
   // episode toggle already refetches PosterGrid internally, so feeding the
   // same counter back in as a prop would make it refetch itself twice.
   const [watchTimeRefreshKey, setWatchTimeRefreshKey] = useState(0);
+  // Fetched once here, not inside each display — the sidebar and mobile top
+  // strip both show it, and self-fetching displays meant two calls per load.
+  const watchTime = useWatchTime(watchTimeRefreshKey);
   const { getToken } = useAuth();
   const router = useRouter();
 
@@ -127,8 +130,8 @@ export function Home() {
       <AppShell
         active={active}
         onNavigate={setActive}
-        sidebarExtra={<WatchTimeStat variant="sidebar" refreshKey={watchTimeRefreshKey} />}
-        topStripExtra={<WatchTimeStat variant="topStrip" refreshKey={watchTimeRefreshKey} />}
+        sidebarExtra={watchTime.status === "ready" ? <WatchTimeDisplay variant="sidebar" {...watchTime} /> : null}
+        topStripExtra={watchTime.status === "ready" ? <WatchTimeDisplay variant="topStrip" {...watchTime} /> : null}
       >
         {renderScreen(active, {
           onAddFriend: () => setActive("settings"),

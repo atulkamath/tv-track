@@ -14,13 +14,6 @@ interface LeaderboardEntryResponse {
   is_self: boolean;
 }
 
-interface WatchTimeStatProps {
-  /** Large stacked treatment for the desktop sidebar vs. a compact single line for the mobile top strip. */
-  variant: "sidebar" | "topStrip";
-  /** Bumped by Home whenever an action could have changed the caller's Watch Time (an add, a parse, a Disambiguation pick, or a change inside the Show Detail modal) — same lifted-refresh-key pattern as PosterGrid's `refreshKey`. */
-  refreshKey?: number;
-}
-
 type LoadState = { status: "loading" } | { status: "error" } | { status: "ready"; minutes: number; rank: number };
 
 interface WatchTimeDisplayProps {
@@ -29,7 +22,7 @@ interface WatchTimeDisplayProps {
   rank: number;
 }
 
-/** Pure presentation, no fetch — shared by the real `WatchTimeStat` below and Hero's static app preview, so the two can never visually drift apart. */
+/** Pure presentation, no fetch — shared by Home's two `useWatchTime`-fed instances and Hero's static app preview, so they can never visually drift apart. */
 export function WatchTimeDisplay({ variant, minutes, rank }: WatchTimeDisplayProps) {
   if (variant === "topStrip") {
     return (
@@ -65,11 +58,14 @@ export function WatchTimeDisplay({ variant, minutes, rank }: WatchTimeDisplayPro
  * same query, not two independent computations that could momentarily
  * disagree.
  *
- * Fails quietly (renders nothing) rather than showing an alert: this is
- * persistent chrome, not a primary content area, and a real outage is
+ * Fails quietly (callers render nothing) rather than showing an alert: this
+ * is persistent chrome, not a primary content area, and a real outage is
  * already visible on the Leaderboard tab itself.
+ *
+ * A hook, not a self-fetching component: Home renders this twice (sidebar +
+ * mobile top strip), which as two components meant two `GET /leaderboard`.
  */
-export function WatchTimeStat({ variant, refreshKey }: WatchTimeStatProps) {
+export function useWatchTime(refreshKey?: number): LoadState {
   const { getToken } = useAuth();
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
@@ -104,6 +100,5 @@ export function WatchTimeStat({ variant, refreshKey }: WatchTimeStatProps) {
     // caller bumps after a mutation, same as PosterGrid's/Leaderboard's own.
   }, [getToken, refreshKey]);
 
-  if (state.status !== "ready") return null;
-  return <WatchTimeDisplay variant={variant} minutes={state.minutes} rank={state.rank} />;
+  return state;
 }

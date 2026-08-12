@@ -24,12 +24,31 @@ beforeEach(() => {
   // default so tests concerned with the `/me` call don't also have to stub
   // `/shows` just to avoid an unhandled-request error.
   server.use(http.get(`${API_URL}/shows`, () => HttpResponse.json([])));
-  // WatchTimeStat (rendered unconditionally in AppShell's sidebar/top-strip
-  // slots) makes its own `GET /leaderboard` call the same way — same reason.
+  // Home's `useWatchTime` fetches `GET /leaderboard` to fill the sidebar and
+  // top-strip slots — same reason.
   server.use(http.get(`${API_URL}/leaderboard`, () => HttpResponse.json([])));
 });
 
 describe("Home", () => {
+  it("fetches the Leaderboard once, not once per Watch Time display", async () => {
+    mockGetToken.mockResolvedValue("token-123");
+    let calls = 0;
+    server.use(
+      http.get(`${API_URL}/me`, () => HttpResponse.json({ id: "u1", friend_code: "ABC123" })),
+      http.get(`${API_URL}/leaderboard`, () => {
+        calls += 1;
+        return HttpResponse.json([{ id: "u1", watch_time_minutes: 260, is_self: true }]);
+      }),
+    );
+
+    renderApp(<Home />);
+
+    // Both the sidebar and the mobile top strip show this number; one hidden
+    // by CSS is still mounted, so self-fetching displays would double this.
+    await waitFor(() => expect(screen.getAllByText("4h 20m")).toHaveLength(2));
+    expect(calls).toBe(1);
+  });
+
   it("renders the app shell, on Home, with the poster grid", () => {
     mockGetToken.mockResolvedValue(null);
     renderApp(<Home />);

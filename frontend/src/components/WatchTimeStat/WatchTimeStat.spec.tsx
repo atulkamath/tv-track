@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import { server } from "../../../test/server";
 import { renderApp, screen, waitFor } from "../../../test/render";
-import { WatchTimeStat, API_URL } from "./WatchTimeStat";
+import { WatchTimeDisplay, useWatchTime, API_URL } from "./WatchTimeStat";
+
+/** Stands in for how Home wires the hook to a display — the shape these tests always exercised. */
+function WatchTimeStat({ variant, refreshKey }: { variant: "sidebar" | "topStrip"; refreshKey?: number }) {
+  const state = useWatchTime(refreshKey);
+  if (state.status !== "ready") return null;
+  return <WatchTimeDisplay variant={variant} minutes={state.minutes} rank={state.rank} />;
+}
 
 const mockGetToken = vi.fn();
 
