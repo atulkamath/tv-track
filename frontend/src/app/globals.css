@@ -148,6 +148,62 @@ a {
   }
 }
 
+/* Breathes while the LLM parses a sentence (#11/#12). A blurred gradient
+   layer behind the input rather than a box-shadow, since a shadow can't hold
+   more than one colour. */
+.thinking-ring {
+  position: relative;
+}
+
+.thinking-ring::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: 0;
+  border-radius: calc(var(--radius) + 3px);
+  background: conic-gradient(from 0deg, #ff2d78, #ff8c00, #ffe600, #00e56a, #00c2ff, #7a5cff, #ff2d78);
+  filter: blur(7px);
+  opacity: 0;
+  pointer-events: none;
+  animation:
+    thinking-breathe 1.6s ease-in-out infinite,
+    thinking-hue 3s linear infinite;
+}
+
+/* The input sits above the glow, and gets an opaque backing only while the
+   ring is active so the blur reads as a halo instead of tinting the field —
+   its normal translucent `bg-input/30` is untouched when idle. */
+.thinking-ring > input {
+  position: relative;
+  z-index: 1;
+  background-color: var(--background);
+}
+
+/* Same opt-out the other effects get, as a media query rather than a
+   `motion-reduce:` variant since Tailwind can't target this pseudo-element. */
+@media (prefers-reduced-motion: reduce) {
+  .thinking-ring::before {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+@keyframes thinking-breathe {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes thinking-hue {
+  to {
+    filter: blur(7px) hue-rotate(360deg);
+  }
+}
+
 @keyframes tile-in {
   from {
     opacity: 0;

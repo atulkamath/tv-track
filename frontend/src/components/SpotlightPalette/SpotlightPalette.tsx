@@ -334,22 +334,25 @@ export function SpotlightPalette({ open, onClose, onShowAdded, onParseStart, onP
   return (
     <Modal open={open} onClose={handleClose} ariaLabel="Spotlight palette">
       <div className="flex flex-col gap-4 p-5">
-        <input
-          type="text"
-          autoFocus
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            // A fresh edit invalidates a stale "done" parse result (the
-            // unmatched strip, in particular) — go back to idle rather than
-            // showing feedback for text that's no longer what's typed.
-            setParseState({ status: "idle" });
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder="Log watching…"
-          aria-label="Search for a show"
-          className="h-11 rounded-md border border-border bg-input/30 px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-        />
+        {/* Wrapper only exists to host the rainbow thinking-ring behind the input while the LLM parses (globals.css). */}
+        <div className={parseState.status === "loading" ? "thinking-ring" : undefined}>
+          <input
+            type="text"
+            autoFocus
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              // A fresh edit invalidates a stale "done" parse result (the
+              // unmatched strip, in particular) — go back to idle rather than
+              // showing feedback for text that's no longer what's typed.
+              setParseState({ status: "idle" });
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Log watching…"
+            aria-label="Search for a show"
+            className="h-11 w-full rounded-md border border-border bg-input/30 px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+        </div>
 
         {errorMessage && (
           <p role="alert" className="text-sm text-destructive">
