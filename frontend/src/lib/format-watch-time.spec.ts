@@ -22,6 +22,20 @@ describe("formatWatchTime", () => {
     expect(formatWatchTime(29 * 24 * 60 + 2 * 60)).toBe("29d 2h");
   });
 
+  it("still shows days right up to the 30-day mark", () => {
+    expect(formatWatchTime(29 * 24 * 60 + 23 * 60)).toBe("29d 23h");
+  });
+
+  it("shows exactly 30 days as a clean 1mo — no + when there is no remainder", () => {
+    expect(formatWatchTime(30 * 24 * 60)).toBe("1mo");
+    expect(formatWatchTime(90 * 24 * 60)).toBe("3mo");
+  });
+
+  it("adds the + only once past a whole month", () => {
+    expect(formatWatchTime(30 * 24 * 60 + 1)).toBe("1mo+");
+    expect(formatWatchTime(89 * 24 * 60)).toBe("2mo+");
+  });
+
   it("rounds fractional minutes", () => {
     expect(formatWatchTime(90.6)).toBe("1h 31m");
   });
