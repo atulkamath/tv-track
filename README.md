@@ -2,6 +2,8 @@
 
 **Work in progress.** A personal TV-watching tracker — log what you watch via natural language, accrue Watch Time, compare with friends on a Leaderboard.
 
+**Live app:** https://tv-track-five.vercel.app
+
 The real point of this project is learning agentic engineering: building a real product spec-first, ticket-by-ticket, with an AI agent doing the implementation and me doing the direction, review, and judgment calls. `backend/` is a NestJS API; `frontend/` is Next.js (see `docs/adr/`). Progress is tracked as GitHub Issues, one per ticket.
 
 ## Where to look
