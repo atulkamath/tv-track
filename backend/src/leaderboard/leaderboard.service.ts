@@ -5,9 +5,9 @@ import { ShowsService } from '../shows/shows.service';
 import type { LeaderboardEntryDto } from './leaderboard.dto';
 
 /**
- * Backs `GET /leaderboard`. Reuses `ShowsService.getWatchTime` per person
- * rather than a separate aggregate query — same "sum live, never stored"
- * rule (CONTEXT.md → Watch Time) applied to more than just the caller.
+ * Backs `GET /leaderboard`. Sums everyone's Watch Time in one query via
+ * `ShowsService.getWatchTimeForUsers` — same "sum live, never stored" rule
+ * (CONTEXT.md → Watch Time) applied to more than just the caller.
  */
 @Injectable()
 export class LeaderboardService {
@@ -25,14 +25,13 @@ export class LeaderboardService {
     });
     const people = [user, ...friendships.map((f) => f.friend)];
 
-    const entries = await Promise.all(
-      people.map(async (person) => ({
-        id: person.id,
-        email: person.email,
-        watch_time_minutes: await this.shows.getWatchTime(person),
-        is_self: person.id === user.id,
-      })),
-    );
+    const totals = await this.shows.getWatchTimeForUsers(people.map((p) => p.id));
+    const entries = people.map((person) => ({
+      id: person.id,
+      email: person.email,
+      watch_time_minutes: totals.get(person.id) ?? 0,
+      is_self: person.id === user.id,
+    }));
 
     return entries.sort((a, b) => b.watch_time_minutes - a.watch_time_minutes);
   }

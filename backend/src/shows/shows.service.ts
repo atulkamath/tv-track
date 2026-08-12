@@ -1,4 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LLM_CLIENT, type LlmClient } from '../integrations/llm/llm-client';
@@ -228,14 +229,27 @@ export class ShowsService {
 
   /** Backs `GET /me/watch-time` — summed live, never stored (CONTEXT.md → Watch Time). */
   async getWatchTime(user: User): Promise<number> {
-    const watched = await this.prisma.watchedEpisode.findMany({
-      where: { userId: user.id },
-      select: { episode: { select: { runtimeMinutes: true } } },
-    });
-    // An episode with no published runtime contributes nothing — not the same
-    // claim as "this episode is 0 minutes long," but the same arithmetic
-    // either way, so a plain `?? 0` here is correct, not a shortcut.
-    return watched.reduce((total, { episode }) => total + (episode.runtimeMinutes ?? 0), 0);
+    const totals = await this.getWatchTimeForUsers([user.id]);
+    return totals.get(user.id) ?? 0;
+  }
+
+  /** Watch Time for several people in one round trip, so the Leaderboard costs one query rather than one per Friend. Raw SQL because the sum crosses a relation, which Prisma's `groupBy` cannot aggregate over. */
+  async getWatchTimeForUsers(userIds: string[]): Promise<Map<string, number>> {
+    if (userIds.length === 0) return new Map();
+
+    // COALESCE mirrors the old `?? 0`: an episode with no published runtime
+    // contributes nothing, and someone with no watched rows totals zero.
+    const rows = await this.prisma.$queryRaw<{ user_id: string; minutes: number }[]>`
+      SELECT we.user_id, COALESCE(SUM(e.runtime_minutes), 0)::int AS minutes
+      FROM watched_episodes we
+      JOIN episodes e ON e.id = we.episode_id
+      WHERE we.user_id IN (${Prisma.join(userIds.map((id) => Prisma.sql`${id}::uuid`))})
+      GROUP BY we.user_id
+    `;
+
+    const totals = new Map(userIds.map((id) => [id, 0]));
+    for (const row of rows) totals.set(row.user_id, Number(row.minutes));
+    return totals;
   }
 
   /**
