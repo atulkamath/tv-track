@@ -5,9 +5,11 @@
 - [ ] Copy its connection string.
 - [ ] Run `npx prisma migrate deploy` against it (from `backend/`, with `DATABASE_URL` set to the Neon string) to create the schema.
 
+> **Every schema change afterwards needs this same `migrate deploy` step, run by hand before the code that uses the new column reaches Render.** Nothing in the pipeline runs migrations for you.
+
 ## 2. Backend — Render
 - [ ] New Web Service on Render, connect the GitHub repo, root directory `backend/`.
-- [ ] Build command: `npm install && npm run build`
+- [ ] Build command: `npm install && npm run build` (`build` runs `prisma generate` first — without it Render compiles against a stale Prisma Client and any new column fails typecheck, even though the migration ran fine)
 - [ ] Start command: `npm run start:prod` (confirmed — runs `node dist/main`)
 - [ ] Env vars: `DATABASE_URL` (Neon string), `CLERK_SECRET_KEY` (live, see step 4), `TMDB_ACCESS_TOKEN`, `OPENROUTER_API_KEY`, `FRONTEND_ORIGIN` (your Vercel URL, from step 3 — CORS reads this in `backend/src/configure-app.ts:16`, defaults to `localhost:3000` if unset) — copy every var currently in `backend/.env`.
 - [ ] Deploy, then note the Render URL (e.g. `https://tv-track-api.onrender.com`).
