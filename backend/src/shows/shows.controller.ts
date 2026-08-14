@@ -58,6 +58,19 @@ export class ShowsController {
     return this.shows.getShowDetail(user, id);
   }
 
+  /** Logs another pass through the show, accruing its runtime to Watch Time again. Not idempotent — each call is one more rewatch. */
+  @Post(':id/rewatch')
+  @HttpCode(200)
+  async rewatch(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string): Promise<ShowDetailDto> {
+    return this.shows.rewatchShow(user, id);
+  }
+
+  /** Takes back one rewatch. Bottoms out at the first watch — it can never unmark the show. */
+  @Delete(':id/rewatch')
+  async undoRewatch(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string): Promise<ShowDetailDto> {
+    return this.shows.undoRewatchShow(user, id);
+  }
+
   /** Marks/unmarks one episode watched. Target-state PUT — see `ToggleWatchedDto`. */
   @Put(':id/episodes/:episodeId')
   async setEpisodeWatched(

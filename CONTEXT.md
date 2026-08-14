@@ -25,8 +25,12 @@ A ranking of a User and their Friends by total watch time, used to compare who i
 _Avoid_: Rankings, standings
 
 **Watch Time**:
-A User's total, computed live as the sum of runtimes across every Episode currently in the Full or Partial-and-checked state on their own list. Not a historical ledger — unchecking, refreshing, or deleting a Show simply removes its Episodes from the sum, with no effect on any other User's total.
+A User's total, computed live as the sum of runtimes across every Episode currently in the Full or Partial-and-checked state on their own list, each counted once per Rewatch. Not a historical ledger — unchecking, refreshing, or deleting a Show simply removes its Episodes from the sum, with no effect on any other User's total.
 _Avoid_: Score, points
+
+**Rewatch**:
+Another pass through a Show the User has already watched, logged from the show itself rather than by re-ticking Episodes. Each Rewatch accrues that Show's runtime to Watch Time again, and can be taken back one at a time. It only counts the Episodes they had actually checked — a Rewatch of a Partial Show accrues the watched part and leaves the Show Partial. Watch State never changes; a Show watched five times is still just Full, and undoing every Rewatch bottoms out at the first watch rather than unmarking anything.
+_Avoid_: Replay, second watch
 
 **NLP Entry**:
 A free-text box where a User types shows and season counts in natural language (e.g. "the office us 5 seasons"); the app resolves each mention to a Show via TMDB and marks every Episode in the stated Seasons as watched by default. Unambiguous mentions resolve into cards immediately; mentions matching multiple TMDB Shows (e.g. "the office") are queued into a Disambiguation Step shown right after, never blocking the mentions that were clear.

@@ -24,6 +24,7 @@ interface ShowCardWire {
   watch_state: WatchState;
   watched_count: number;
   episode_count: number;
+  rewatch_count: number;
 }
 
 interface Show {
@@ -33,6 +34,7 @@ interface Show {
   watchState: WatchState;
   watchedCount: number;
   episodeCount: number;
+  rewatchCount: number;
 }
 
 function mapShow(card: ShowCardWire): Show {
@@ -43,6 +45,7 @@ function mapShow(card: ShowCardWire): Show {
     watchState: card.watch_state,
     watchedCount: card.watched_count,
     episodeCount: card.episode_count,
+    rewatchCount: card.rewatch_count,
   };
 }
 
@@ -350,6 +353,15 @@ function PosterTile({
         )}
         {isPartial && (
           <span className="absolute right-1.5 bottom-2.5 text-[11px] font-bold text-white">{percent}%</span>
+        )}
+        {/* Top-left, so it never collides with the Full checkmark or the Partial percentage. */}
+        {show.rewatchCount > 0 && (
+          <span
+            aria-label={`Rewatched ${show.rewatchCount} times`}
+            className="absolute top-2 left-2 rounded-full bg-black/65 px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums backdrop-blur-sm"
+          >
+            {show.rewatchCount + 1}×
+          </span>
         )}
         <div className="absolute inset-x-0 bottom-0 overflow-hidden bg-gradient-to-t from-black/85 to-transparent px-2 pt-8 pb-2">
           <span className="block truncate text-sm font-bold text-white">{show.title}</span>

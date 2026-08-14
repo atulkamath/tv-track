@@ -12,7 +12,13 @@ import {
   type ParseShowsResultDto,
   type UnmatchedMentionDto,
 } from './parse-shows.dto';
-import { toShowCardDto, toShowDetailDto, type ShowCardDto, type ShowDetailDto, type ShowTree } from './show.dto';
+import {
+  toShowCardDtoFromCounts,
+  toShowDetailDto,
+  type ShowCardDto,
+  type ShowCounts,
+  type ShowDetailDto,
+} from './show.dto';
 import type { ToggleWatchedDto } from './toggle-watched.dto';
 
 /** `Show.seasons[].episodes[].watchedBy` filtered to one caller — see `ShowTree`. */
@@ -89,9 +95,10 @@ export class ShowsService {
 
     const show = await this.prisma.show.findUniqueOrThrow({
       where: { id: mirrored.id },
-      include: showTreeInclude(user.id),
+      select: { id: true, title: true, posterPath: true },
     });
-    return toShowCardDto(show);
+    const counts = await this.countEpisodesForShows(user.id, [show.id]);
+    return toShowCardDtoFromCounts(show, counts.get(show.id));
   }
 
   /**
@@ -135,14 +142,57 @@ export class ShowsService {
     return { resolved, ambiguous, unmatched };
   }
 
-  /** Backs `GET /shows` — every show the caller has watched at least one episode of. */
+  /**
+   * Backs `GET /shows` — every show the caller has watched at least one
+   * episode of. Counts come from a `GROUP BY`, not a hydrated season/episode
+   * tree: a card needs two integers, and fetching every Episode row to count
+   * them meant a large library moved megabytes out of the database per load
+   * to produce a few KB of JSON. Costs two queries flat, whatever the size.
+   */
   async listShows(user: User): Promise<ShowCardDto[]> {
     const shows = await this.prisma.show.findMany({
       where: { seasons: { some: { episodes: { some: { watchedBy: { some: { userId: user.id } } } } } } },
-      include: showTreeInclude(user.id),
+      select: { id: true, title: true, posterPath: true },
       orderBy: { title: 'asc' },
     });
-    return shows.map(toShowCardDto);
+
+    const counts = await this.countEpisodesForShows(
+      user.id,
+      shows.map((show) => show.id),
+    );
+    return shows.map((show) => toShowCardDtoFromCounts(show, counts.get(show.id)));
+  }
+
+  /**
+   * Episode/watched tallies for several shows in one query. `LEFT JOIN` so a
+   * show with nothing watched still reports its episode count, and the
+   * `user_id` predicate lives in the join rather than the `WHERE` — in the
+   * `WHERE` it would drop those unwatched rows and turn the outer join back
+   * into an inner one.
+   */
+  private async countEpisodesForShows(userId: string, showIds: string[]): Promise<Map<string, ShowCounts>> {
+    if (showIds.length === 0) return new Map();
+
+    const rows = await this.prisma.$queryRaw<
+      { show_id: string; episode_count: number; watched_count: number; max_plays: number }[]
+    >`
+      SELECT s.show_id,
+             COUNT(e.id)::int AS episode_count,
+             COUNT(we.id)::int AS watched_count,
+             COALESCE(MAX(we.plays), 0)::int AS max_plays
+      FROM seasons s
+      JOIN episodes e ON e.season_id = s.id
+      LEFT JOIN watched_episodes we ON we.episode_id = e.id AND we.user_id = ${userId}::uuid
+      WHERE s.show_id IN (${Prisma.join(showIds.map((id) => Prisma.sql`${id}::uuid`))})
+      GROUP BY s.show_id
+    `;
+
+    return new Map(
+      rows.map((row) => [
+        row.show_id,
+        { episodeCount: Number(row.episode_count), watchedCount: Number(row.watched_count), maxPlays: Number(row.max_plays) },
+      ]),
+    );
   }
 
   /** Backs `GET /shows/:id` — the full season/episode tree for one show's accordion. */
@@ -211,6 +261,47 @@ export class ShowsService {
   }
 
   /**
+   * Backs `POST /shows/:id/rewatch`. Bumps `plays` on the episodes the caller
+   * has *already* watched, so the show's runtime accrues to Watch Time a
+   * second time. Deliberately creates no new rows: a Rewatch on a Partial show
+   * counts the part they'd actually seen rather than quietly promoting the
+   * show to Full, which would let a rewatch edit Watch State behind their back.
+   */
+  async rewatchShow(user: User, showId: string): Promise<ShowDetailDto> {
+    const show = await this.prisma.show.findUnique({ where: { id: showId } });
+    if (!show) {
+      throw new NotFoundException('Show not found.');
+    }
+
+    await this.prisma.watchedEpisode.updateMany({
+      where: { userId: user.id, episode: { season: { showId } } },
+      data: { plays: { increment: 1 } },
+    });
+
+    return this.getShowDetail(user, showId);
+  }
+
+  /**
+   * Backs `DELETE /shows/:id/rewatch` — takes back one Rewatch. The `plays > 1`
+   * filter is the floor: a watched Episode is always at least one play, so
+   * undoing past the first watch is a no-op rather than a way to zero out
+   * Watch Time while the Episode still reads as watched.
+   */
+  async undoRewatchShow(user: User, showId: string): Promise<ShowDetailDto> {
+    const show = await this.prisma.show.findUnique({ where: { id: showId } });
+    if (!show) {
+      throw new NotFoundException('Show not found.');
+    }
+
+    await this.prisma.watchedEpisode.updateMany({
+      where: { userId: user.id, episode: { season: { showId } }, plays: { gt: 1 } },
+      data: { plays: { decrement: 1 } },
+    });
+
+    return this.getShowDetail(user, showId);
+  }
+
+  /**
    * Backs `DELETE /shows/:id`. Removes only the caller's own `WatchedEpisode`
    * rows for this show — the TMDB mirror (`Show`/`Season`/`Episode`) is shared
    * (ADR 0002) and is never touched, so another user's copy of the same show,
@@ -239,8 +330,9 @@ export class ShowsService {
 
     // COALESCE mirrors the old `?? 0`: an episode with no published runtime
     // contributes nothing, and someone with no watched rows totals zero.
+    // `* we.plays` is what makes a Rewatch accrue Watch Time again.
     const rows = await this.prisma.$queryRaw<{ user_id: string; minutes: number }[]>`
-      SELECT we.user_id, COALESCE(SUM(e.runtime_minutes), 0)::int AS minutes
+      SELECT we.user_id, COALESCE(SUM(e.runtime_minutes * we.plays), 0)::int AS minutes
       FROM watched_episodes we
       JOIN episodes e ON e.id = we.episode_id
       WHERE we.user_id IN (${Prisma.join(userIds.map((id) => Prisma.sql`${id}::uuid`))})

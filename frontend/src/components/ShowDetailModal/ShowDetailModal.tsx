@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { ChevronRight, X } from "lucide-react";
+import { ChevronRight, RotateCcw, Undo2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Modal } from "@/components/Modal/Modal";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ interface ShowDetailWire {
   id: string;
   title: string;
   poster_path: string | null;
+  rewatch_count: number;
   seasons: SeasonWire[];
 }
 
@@ -55,6 +56,7 @@ interface ShowDetail {
   id: string;
   title: string;
   posterUrl: string | null;
+  rewatchCount: number;
   seasons: Season[];
 }
 
@@ -63,6 +65,7 @@ function mapShowDetail(wire: ShowDetailWire): ShowDetail {
     id: wire.id,
     title: wire.title,
     posterUrl: wire.poster_path ? `${TMDB_IMAGE_BASE}${wire.poster_path}` : null,
+    rewatchCount: wire.rewatch_count,
     seasons: wire.seasons.map((season) => ({
       seasonNumber: season.season_number,
       watchState: season.watch_state,
@@ -111,12 +114,18 @@ function withSeasonWatched(detail: ShowDetail, seasonNumber: number, watched: bo
   };
 }
 
-/** Sets every episode across every season — used for the show mark-all optimistic tick. */
+/** Sets every episode across every season — used for the show mark-all optimistic tick. Unmarking clears the rewatch tally with it. */
 function withShowWatched(detail: ShowDetail, watched: boolean): ShowDetail {
   return {
     ...detail,
+    rewatchCount: watched ? detail.rewatchCount : 0,
     seasons: detail.seasons.map((season) => ({ ...season, episodes: season.episodes.map((episode) => ({ ...episode, watched })) })),
   };
+}
+
+/** Rewatching changes no episode's watched flag — only the tally, which floors at 0. */
+function withRewatchDelta(detail: ShowDetail, delta: number): ShowDetail {
+  return { ...detail, rewatchCount: Math.max(0, detail.rewatchCount + delta) };
 }
 
 type DetailState = { status: "loading" } | { status: "error" } | { status: "ready"; detail: ShowDetail };
@@ -281,6 +290,32 @@ export function ShowDetailModal({ showId, open, onClose, onChanged }: ShowDetail
     }
   }
 
+  /** `delta` is +1 to log a rewatch, -1 to take one back. */
+  async function handleRewatch(delta: 1 | -1) {
+    if (detailState.status !== "ready" || !showId) return;
+    const previous = detailState.detail;
+
+    setDetailState({ status: "ready", detail: withRewatchDelta(previous, delta) });
+    setErrorMessage(null);
+    setShowActionBusy(true);
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_URL}/shows/${showId}/rewatch`, {
+        method: delta > 0 ? "POST" : "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error(`${delta > 0 ? "POST" : "DELETE"} rewatch failed: ${response.status}`);
+      const wire = (await response.json()) as ShowDetailWire;
+      setDetailState({ status: "ready", detail: mapShowDetail(wire) });
+      onChanged?.();
+    } catch {
+      setDetailState({ status: "ready", detail: previous });
+      setErrorMessage(delta > 0 ? "Couldn't log that rewatch. Try again." : "Couldn't undo that rewatch. Try again.");
+    } finally {
+      setShowActionBusy(false);
+    }
+  }
+
   async function handleDelete() {
     if (!showId) return;
     if (!deleteArmed) {
@@ -337,6 +372,7 @@ export function ShowDetailModal({ showId, open, onClose, onChanged }: ShowDetail
           onToggleEpisode={handleToggleEpisode}
           onSeasonMarkAll={handleSeasonMarkAll}
           onShowMarkAll={handleShowMarkAll}
+          onRewatch={handleRewatch}
           busySeasons={busySeasons}
           showActionBusy={showActionBusy}
           errorMessage={errorMessage}
@@ -358,6 +394,7 @@ function ShowDetailBody({
   onToggleEpisode,
   onSeasonMarkAll,
   onShowMarkAll,
+  onRewatch,
   busySeasons,
   showActionBusy,
   errorMessage,
@@ -373,6 +410,7 @@ function ShowDetailBody({
   onToggleEpisode: (seasonNumber: number, episode: Episode) => void;
   onSeasonMarkAll: (season: Season, watched: boolean) => void;
   onShowMarkAll: (watched: boolean) => void;
+  onRewatch: (delta: 1 | -1) => void;
   busySeasons: Set<number>;
   showActionBusy: boolean;
   errorMessage: string | null;
@@ -409,16 +447,32 @@ function ShowDetailBody({
           <h2 className="truncate pr-8 text-lg font-extrabold">{detail.title}</h2>
           <p className="text-sm text-muted-foreground tabular-nums">
             {watchedCount} of {episodes.length} watched
+            {detail.rewatchCount > 0 && <span className="text-brand"> · rewatched {detail.rewatchCount}×</span>}
           </p>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="mt-1 w-fit"
-            onClick={() => onShowMarkAll(!isShowFull)}
-            disabled={showActionBusy}
-          >
-            {isShowFull ? "Unmark all" : "Mark all watched"}
-          </Button>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="secondary" className="w-fit" onClick={() => onShowMarkAll(!isShowFull)} disabled={showActionBusy}>
+              {isShowFull ? "Unmark all" : "Mark all watched"}
+            </Button>
+            {/* Only offered once something is watched — a rewatch bumps existing episodes and would be a silent no-op on an untouched show. */}
+            {watchedCount > 0 && (
+              <Button size="sm" variant="ghost" className="w-fit" onClick={() => onRewatch(1)} disabled={showActionBusy}>
+                <RotateCcw className="size-3.5" aria-hidden="true" />
+                Rewatched it
+              </Button>
+            )}
+            {detail.rewatchCount > 0 && (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Undo a rewatch"
+                title="Undo a rewatch"
+                onClick={() => onRewatch(-1)}
+                disabled={showActionBusy}
+              >
+                <Undo2 className="size-3.5" aria-hidden="true" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

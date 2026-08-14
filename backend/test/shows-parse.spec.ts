@@ -141,6 +141,7 @@ describe('POST /shows/parse', () => {
         watch_state: 'full',
         watched_count: 3,
         episode_count: 3,
+        rewatch_count: 0,
       },
     ]);
   });

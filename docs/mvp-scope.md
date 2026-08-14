@@ -30,10 +30,12 @@ _Was 15. `GET /shows/search` added 2026-07-26 during `/to-spec` — a deliberate
 - `GET /shows/:id` — full season/episode tree for one show's accordion.
 - `PUT /shows/:id/episodes/:episodeId` — `{ watched: bool }`; insert/delete one `watched_episodes` row. Idempotent.
 - `PUT /shows/:id/seasons/:seasonNumber` — same, for every episode in the season.
+- `POST /shows/:id/rewatch` — logs another pass through the show, accruing its runtime to Watch Time again. Bumps `plays` on already-watched episodes only; never marks anything watched, so Watch State is untouched. Not idempotent.
+- `DELETE /shows/:id/rewatch` — takes back one rewatch. Floors at `plays = 1`, so it can never unmark the show or zero its Watch Time; undoing past the first watch is a no-op.
 - `DELETE /shows/:id` — removes the user's watched rows + card; no effect on other users or the mirror.
 
 ### Watch time & leaderboard
-- `GET /me/watch-time` — sum of watched episode runtimes, computed live.
+- `GET /me/watch-time` — sum of watched episode runtimes × plays, computed live.
 - `GET /leaderboard` — same sum for self + accepted friends, sorted.
 
 ### Profile & friends

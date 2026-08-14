@@ -134,6 +134,10 @@ model WatchedEpisode {
   userId    String   @map("user_id") @db.Uuid
   episode   Episode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   episodeId String   @map("episode_id") @db.Uuid
+  /// How many times through this Episode. 1 on a first watch; a Rewatch bumps
+  /// it, which multiplies the Episode's contribution to Watch Time. Watch
+  /// State ignores it entirely — 1 play and 5 plays are equally "watched".
+  plays     Int      @default(1)
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([userId, episodeId])
